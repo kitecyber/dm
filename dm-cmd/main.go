@@ -1,8 +1,6 @@
 package main
 
-import (
-	"dm-cmd/cmd"
-)
+import "github.com/kitecyber/dm/dm-cmd/cmd"
 
 func main() {
 	cmd.Execute()

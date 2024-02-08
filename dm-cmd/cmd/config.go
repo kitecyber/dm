@@ -1,7 +1,8 @@
 package cmd
 
 import (
-	manager "dm-cmd/manager"
+	"github.com/kitecyber/dm/dm-cmd/manager"
+
 	"log"
 
 	"github.com/spf13/cobra"
