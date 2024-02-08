@@ -16,12 +16,12 @@ var show string
 
 func init() {
 
-	dnsCmd.Flags().StringVarP(&scope, "scope", "s", "system", "two types of the scopes. system|interface")
+	dnsCmd.Flags().StringVarP(&scope, "scope", "s", "system", "two types of the scopes. system|command.command is used to set through system based commands")
 	dnsCmd.Flags().StringVarP(&primaryDNS, "pd", "", "", "provide primary dns")
 	dnsCmd.Flags().StringVarP(&secondaryDNS, "sd", "", "", "provide secondary dns")
 	dnsCmd.Flags().StringVarP(&iface, "interface", "i", "system", "provide interfaces based on the system")
 
-	showCmd.Flags().StringVarP(&scope, "scope", "s", "system", "two types of the scopes. system|interface")
+	showCmd.Flags().StringVarP(&scope, "scope", "s", "system", "two types of the scopes. system|command")
 	showCmd.Flags().StringVarP(&iface, "interface", "i", "system", "provide interfaces based on the system")
 
 	rootCmd.AddCommand(dnsCmd)
@@ -51,6 +51,8 @@ var showCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalln(err)
 			}
+		} else {
+			log.Fatalln("undefined scope.Scope can be system|command")
 		}
 	},
 }
@@ -59,28 +61,31 @@ var dnsCmd = &cobra.Command{
 	Short: "dns is to configure dns",
 	Long:  `dns is to configure dns, settings to be supplied`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if primaryDNS == "" || secondaryDNS == "" {
+			log.Fatalln("primary and secondary dns ips must be given")
+		}
+
 		var idm manager.IDNSDeviceManager
 		if scope == "system" {
 			idm = new(manager.GlobalDNS)
-			if primaryDNS == "" || secondaryDNS == "" {
-				log.Fatalln("primary and secondary dns ips must be given")
-			}
 			err := idm.SetDNS("", primaryDNS, secondaryDNS)
 			if err != nil {
 				log.Fatalln(err)
 			}
+			println("dns has been set")
 		} else if scope == "command" {
 			if iface == "" {
 				log.Fatalln("interface cannot be empty")
 			}
 			idm = new(manager.CommandDNS)
-			if primaryDNS == "" || secondaryDNS == "" {
-				log.Fatalln("primary and secondary dns ips must be given")
-			}
+
 			err := idm.SetDNS(iface, primaryDNS, secondaryDNS)
 			if err != nil {
 				log.Fatalln(err)
 			}
+			println("dns has been set")
+		} else {
+			log.Fatalln("undefined scope.Scope can be system|command")
 		}
 	},
 }
