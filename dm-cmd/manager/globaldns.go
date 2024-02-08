@@ -2,7 +2,7 @@ package manager
 
 import (
 	"fmt"
-	"os"
+	"log"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -24,34 +24,39 @@ func (gd *GlobalDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 		if !gd.HasCommand("netsh") {
 			return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 		}
-		//cmd = exec.Command("netsh", "interface", "ipv4", "set", "dnsserver", "name=", "source=static", "address="+primaryDNS, "register=PRIMARY")
-
-		cmd := exec.Command("netsh", "interface", "ipv4", "set", "dns", "name=", "source=static", "address="+primaryDNS)
-		err := cmd.Run()
-		if err != nil {
-			return fmt.Errorf("error setting primary DNS: %v", err)
+		hasOneSet := false
+		for _, iface := range ActiveInterfaces {
+			cmdPrimary := exec.Command("netsh", "interface", "ipv4", "set", "dns", "name="+iface, "source=static", "addr="+primaryDNS)
+			cmdSecondary := exec.Command("netsh", "interface", "ipv4", "add", "dns", "name="+iface, "addr="+secondaryDNS, "index=2")
+			err1 := cmdPrimary.Run()
+			if err1 != nil {
+				log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", iface, err1.Error())
+			}
+			err2 := cmdSecondary.Run()
+			if err2 != nil {
+				log.Printf("Error setting Secondary DNS for the interface:%v.Error:%v", iface, err2.Error())
+			}
+			if err1 == nil && err2 == nil {
+				hasOneSet = true
+			}
 		}
-
-		// Set secondary DNS server
-		cmd = exec.Command("netsh", "interface", "ipv4", "add", "dns", "name=", "addr="+secondaryDNS, "index=2")
-		err = cmd.Run()
-		if err != nil {
-			return fmt.Errorf("error setting secondary DNS: %v", err)
+		if !hasOneSet {
+			return fmt.Errorf("error setting DNS servers")
 		}
-
 	case "linux", "darwin":
 		if !gd.HasCommand("sh") {
 			return fmt.Errorf("sh command not for operating system: %s", runtime.GOOS)
 		}
 		cmd = exec.Command("sh", "-c", fmt.Sprintf("echo 'nameserver %s\nnameserver %s' > /etc/resolv.conf", primaryDNS, secondaryDNS))
+		err := cmd.Run()
+		if err != nil {
+			return fmt.Errorf("error setting secondary DNS: %v", err)
+		}
 
 	default:
 		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return nil
 }
 
 // there is no significance for iface here as it is system level DNS. This is kept to satisfy the interface
@@ -85,10 +90,6 @@ func (gd *GlobalDNS) HasCommand(cmdName string) bool {
 	return err == nil
 }
 
-func (gd *GlobalDNS) GetActiveInterfaces() ([]string, error) {
-	return nil, nil
-}
-
 func (gd *GlobalDNS) getDNSWindows() (string, string, error) {
 	// Get DNS settings using netsh command
 	cmd := exec.Command("netsh", "interface", "ipv4", "show", "dns")
@@ -96,7 +97,6 @@ func (gd *GlobalDNS) getDNSWindows() (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("error getting DNS settings: %v", err)
 	}
-
 	// Parse output to extract DNS server addresses
 	lines := strings.Split(string(output), "\r\n")
 	primaryDNS := ""

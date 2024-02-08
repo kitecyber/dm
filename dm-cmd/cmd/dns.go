@@ -7,15 +7,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var configType string
 var scope string
 var primaryDNS string
 var secondaryDNS string
 var iface string
-var show string
 
 func init() {
-
 	dnsCmd.Flags().StringVarP(&scope, "scope", "s", "system", "two types of the scopes. system|command.command is used to set through system based commands")
 	dnsCmd.Flags().StringVarP(&primaryDNS, "pd", "", "", "provide primary dns")
 	dnsCmd.Flags().StringVarP(&secondaryDNS, "sd", "", "", "provide secondary dns")
@@ -58,8 +55,8 @@ var showCmd = &cobra.Command{
 }
 var dnsCmd = &cobra.Command{
 	Use:   "dns",
-	Short: "dns is to configure dns",
-	Long:  `dns is to configure dns, settings to be supplied`,
+	Short: "dns sub-command is to configure dns",
+	Long:  `dns sub-command is to configure dns, settings to be supplied.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if primaryDNS == "" || secondaryDNS == "" {
 			log.Fatalln("primary and secondary dns ips must be given")
@@ -72,7 +69,7 @@ var dnsCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalln(err)
 			}
-			println("dns has been set")
+			println("Primary and secondary DNS servers set successfully.")
 		} else if scope == "command" {
 			if iface == "" {
 				log.Fatalln("interface cannot be empty")
@@ -83,7 +80,7 @@ var dnsCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalln(err)
 			}
-			println("dns has been set")
+			println("Primary and secondary DNS servers set successfully.")
 		} else {
 			log.Fatalln("undefined scope.Scope can be system|command")
 		}

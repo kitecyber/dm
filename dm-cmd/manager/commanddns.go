@@ -1,10 +1,8 @@
 package manager
 
 import (
-	"errors"
 	"fmt"
-	"net"
-	"os"
+	"log"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -26,62 +24,63 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 			if !cd.HasCommand("netsh") {
 				return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 			}
-			interfaceNames, err := cd.GetActiveInterfaces()
-			if interfaceNames == nil {
-				return fmt.Errorf("unable to determine active interface")
-			} else if err != nil {
-				return err
-			}
-			for _, ifacename := range interfaceNames {
-				cmd := exec.Command("netsh", "interface", "ip", "set", "dns", "name="+ifacename, "static", primaryDNS, secondaryDNS)
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				err = cmd.Run()
-				if err != nil {
-					return err
+			hasOneSet := false
+			for _, activeIface := range ActiveInterfaces {
+				cmdPrimary := exec.Command("netsh", "interface", "ipv4", "set", "dns", "name="+activeIface, "source=static", "addr="+primaryDNS)
+				cmdSecondary := exec.Command("netsh", "interface", "ipv4", "add", "dns", "name="+activeIface, "addr="+secondaryDNS, "index=2")
+				err1 := cmdPrimary.Run()
+				if err1 != nil {
+					log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", activeIface, err1.Error())
 				}
+				err2 := cmdSecondary.Run()
+				if err2 != nil {
+					log.Printf("Error setting Secondary DNS for the interface:%v.Error:%v", activeIface, err2.Error())
+				}
+				if err1 == nil && err2 == nil {
+					hasOneSet = true
+				}
+			}
+			if !hasOneSet {
+				return fmt.Errorf("error setting DNS servers")
 			}
 
 		case "linux":
 			if !cd.HasCommand("nmcli") {
 				return fmt.Errorf("nmcli command not found, consider installing NetworkManager or use an alternative method for your Linux distribution")
 			}
-
-			interfaceNames, err := cd.GetActiveInterfaces()
-			if interfaceNames == nil {
-				return fmt.Errorf("unable to determine active interface")
-			} else if err != nil {
-				return err
-			}
-
-			for _, ifacename := range interfaceNames {
-				cmd = exec.Command("nmcli", "connection", "modify", ifacename, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				err = cmd.Run()
+			hasOneSet := false
+			for _, activeIface := range ActiveInterfaces {
+				cmd = exec.Command("nmcli", "connection", "modify", activeIface, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
+				err := cmd.Run()
 				if err != nil {
-					return err
+					log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", activeIface, err.Error())
+				}
+				if err == nil {
+					hasOneSet = true
 				}
 			}
+			if !hasOneSet {
+				return fmt.Errorf("error setting DNS servers")
+			}
+			//	cmd = exec.Command("nmcli", "connection", "modify", ifacename, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
 
 		case "darwin":
 			if !cd.HasCommand("networksetup") {
 				return fmt.Errorf("networksetup command not found, consider installing it")
 			}
-			interfaceNames, err := cd.GetActiveInterfaces()
-			if interfaceNames == nil {
-				return fmt.Errorf("unable to determine active interface")
-			} else if err != nil {
-				return err
-			}
-			for _, ifacename := range interfaceNames {
-				cmd := exec.Command("networksetup", "-setdnsservers", ifacename, primaryDNS, secondaryDNS)
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				err = cmd.Run()
+			hasOneSet := false
+			for _, activeIface := range ActiveInterfaces {
+				cmd := exec.Command("networksetup", "-setdnsservers", activeIface, primaryDNS, secondaryDNS)
+				err := cmd.Run()
 				if err != nil {
-					return err
+					log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", activeIface, err.Error())
 				}
+				if err == nil {
+					hasOneSet = true
+				}
+			}
+			if !hasOneSet {
+				return fmt.Errorf("error setting DNS servers")
 			}
 
 		default:
@@ -93,21 +92,21 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 			if !cd.HasCommand("netsh") {
 				return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 			}
-			cmd := exec.Command("netsh", "interface", "ip", "set", "dns", "name="+iface, "static", primaryDNS, secondaryDNS)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err := cmd.Run()
-			if err != nil {
-				return err
+			cmdPrimary := exec.Command("netsh", "interface", "ipv4", "set", "dns", "name="+iface, "source=static", "addr="+primaryDNS)
+			cmdSecondary := exec.Command("netsh", "interface", "ipv4", "add", "dns", "name="+iface, "addr="+secondaryDNS, "index=2")
+			err1 := cmdPrimary.Run()
+			if err1 != nil {
+				return fmt.Errorf("Error setting Primary DNS for the interface:%v.Error:%v", iface, err1.Error())
 			}
-
+			err2 := cmdSecondary.Run()
+			if err2 != nil {
+				return fmt.Errorf("Error setting Secondary DNS for the interface:%v.Error:%v", iface, err2.Error())
+			}
 		case "linux":
 			if !cd.HasCommand("nmcli") {
 				return fmt.Errorf("nmcli command not found, consider installing NetworkManager or use an alternative method for your Linux distribution")
 			}
 			cmd = exec.Command("nmcli", "connection", "modify", iface, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
 			err := cmd.Run()
 			if err != nil {
 				return err
@@ -118,8 +117,6 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 				return fmt.Errorf("networksetup command not found, consider installing it")
 			}
 			cmd := exec.Command("networksetup", "-setdnsservers", iface, primaryDNS, secondaryDNS)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
 			err := cmd.Run()
 			if err != nil {
 				return err
@@ -129,23 +126,6 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 		}
 	}
 	return nil
-}
-
-func (cd *CommandDNS) GetActiveInterfaces() ([]string, error) {
-	ifaces := make([]string, 0)
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return nil, errors.New("Error getting network interfaces:" + err.Error())
-
-	}
-
-	for _, iface := range interfaces {
-		if (iface.Flags&net.FlagUp) != 0 && (iface.Flags&net.FlagLoopback) == 0 {
-			ifaces = append(ifaces, iface.Name)
-		}
-	}
-
-	return ifaces, nil
 }
 
 func (cd *CommandDNS) HasCommand(cmdName string) bool {
