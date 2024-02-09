@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/kitecyber/dm/dm-cmd/manager"
+	"github.com/kitecyber/dm/dm-cmd/manager/dns"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +33,7 @@ var showCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var idm manager.IDNSDeviceManager
 		if scope == "system" {
-			idm = new(manager.GlobalDNS)
+			idm = new(dns.GlobalDNS)
 			pd, sd, err := idm.GetDNS("system")
 			println("Primary DNS:\t", pd, "\nSeconday DNS:\t", sd)
 			if err != nil {
@@ -42,7 +43,7 @@ var showCmd = &cobra.Command{
 			if iface == "" {
 				log.Fatalln("interface cannot be empty")
 			}
-			idm = new(manager.CommandDNS)
+			idm = new(dns.CommandDNS)
 			pd, sd, err := idm.GetDNS(iface)
 			println("Primary DNS:", pd, "\nSeconday DNS:", sd)
 			if err != nil {
@@ -56,7 +57,7 @@ var showCmd = &cobra.Command{
 var dnsCmd = &cobra.Command{
 	Use:   "dns",
 	Short: "dns sub-command is to configure dns",
-	Long:  `dns sub-command is to configure dns, settings to be supplied.`,
+	Long:  `dns sub-command is to configure dns, settings to be supplied.P`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if primaryDNS == "" || secondaryDNS == "" {
 			log.Fatalln("primary and secondary dns ips must be given")
@@ -64,7 +65,7 @@ var dnsCmd = &cobra.Command{
 
 		var idm manager.IDNSDeviceManager
 		if scope == "system" {
-			idm = new(manager.GlobalDNS)
+			idm = new(dns.GlobalDNS)
 			err := idm.SetDNS("", primaryDNS, secondaryDNS)
 			if err != nil {
 				log.Fatalln(err)
@@ -74,7 +75,7 @@ var dnsCmd = &cobra.Command{
 			if iface == "" {
 				log.Fatalln("interface cannot be empty")
 			}
-			idm = new(manager.CommandDNS)
+			idm = new(dns.CommandDNS)
 
 			err := idm.SetDNS(iface, primaryDNS, secondaryDNS)
 			if err != nil {

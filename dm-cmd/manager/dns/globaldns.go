@@ -1,4 +1,4 @@
-package manager
+package dns
 
 import (
 	"fmt"
@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/kitecyber/dm/dm-cmd/manager"
 )
 
 type GlobalDNS struct{}
@@ -13,19 +15,19 @@ type GlobalDNS struct{}
 // there is no significance for iface here as it is system level DNS. This is kept to satisfy the interface
 func (gd *GlobalDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 	var cmd *exec.Cmd
-	if !IsValidIP(primaryDNS) {
+	if !manager.IsValidIP(primaryDNS) {
 		return fmt.Errorf("invalid primary dns ip address %v", primaryDNS)
 	}
-	if !IsValidIP(secondaryDNS) {
+	if !manager.IsValidIP(secondaryDNS) {
 		return fmt.Errorf("invalid secondary dns ip address %v", secondaryDNS)
 	}
 	switch runtime.GOOS {
 	case "windows":
-		if !gd.HasCommand("netsh") {
+		if !manager.HasCommand("netsh") {
 			return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 		}
 		hasOneSet := false
-		for _, iface := range ActiveInterfaces {
+		for _, iface := range manager.ActiveInterfaces {
 			cmdPrimary := exec.Command("netsh", "interface", "ipv4", "set", "dns", "name="+iface, "source=static", "addr="+primaryDNS)
 			cmdSecondary := exec.Command("netsh", "interface", "ipv4", "add", "dns", "name="+iface, "addr="+secondaryDNS, "index=2")
 			err1 := cmdPrimary.Run()
@@ -44,7 +46,7 @@ func (gd *GlobalDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 			return fmt.Errorf("error setting DNS servers")
 		}
 	case "linux", "darwin":
-		if !gd.HasCommand("sh") {
+		if !manager.HasCommand("sh") {
 			return fmt.Errorf("sh command not for operating system: %s", runtime.GOOS)
 		}
 		cmd = exec.Command("sh", "-c", fmt.Sprintf("echo 'nameserver %s\nnameserver %s' > /etc/resolv.conf", primaryDNS, secondaryDNS))
@@ -64,13 +66,13 @@ func (gd *GlobalDNS) GetDNS(iface string) (string, string, error) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		if !gd.HasCommand("netsh") {
+		if !manager.HasCommand("netsh") {
 			return "", "", fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 		}
 		return gd.getDNSWindows() // get primary and secondary dns for windows
 
 	case "linux", "darwin":
-		if !gd.HasCommand("cat") {
+		if !manager.HasCommand("cat") {
 			return "", "", fmt.Errorf("cat command not for operating system: %s", runtime.GOOS)
 		}
 		cmd = exec.Command("cat", "/etc/resolv.conf")
@@ -83,11 +85,6 @@ func (gd *GlobalDNS) GetDNS(iface string) (string, string, error) {
 	default:
 		return "", "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
-}
-
-func (gd *GlobalDNS) HasCommand(cmdName string) bool {
-	_, err := exec.LookPath(cmdName)
-	return err == nil
 }
 
 func (gd *GlobalDNS) getDNSWindows() (string, string, error) {

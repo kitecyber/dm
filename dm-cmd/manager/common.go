@@ -4,6 +4,9 @@ import (
 	"errors"
 	"log"
 	"net"
+	"os/exec"
+	"strconv"
+	"strings"
 )
 
 func GetActiveInterfaces() ([]string, error) {
@@ -26,6 +29,42 @@ func GetActiveInterfaces() ([]string, error) {
 func IsValidIP(ip string) bool {
 	parsedIP := net.ParseIP(ip)
 	return parsedIP != nil
+}
+
+func IsValidCIDR(cidr string) bool {
+	_, _, err := net.ParseCIDR(cidr)
+	return err == nil
+}
+
+func IsValidPort(port string) bool {
+	if strings.ToLower(port) == "all" {
+		return true
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		return false
+	}
+	if p >= 0 && p <= 65535 {
+		return true
+	}
+	return false
+}
+
+func IsValidIPAddressOrCIDR(input string) bool {
+	// Check if the input is a valid IP address
+	if IsValidIP(input) {
+		return true
+	}
+	// Check if the input is a valid CIDR notation
+	if IsValidCIDR(input) {
+		return true
+	}
+	return false
+}
+
+func HasCommand(cmdName string) bool {
+	_, err := exec.LookPath(cmdName)
+	return err == nil
 }
 
 var ActiveInterfaces []string

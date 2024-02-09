@@ -1,4 +1,4 @@
-package manager
+package dns
 
 import (
 	"fmt"
@@ -6,26 +6,28 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/kitecyber/dm/dm-cmd/manager"
 )
 
 type CommandDNS struct{}
 
 func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
-	if !IsValidIP(primaryDNS) {
+	if !manager.IsValidIP(primaryDNS) {
 		return fmt.Errorf("invalid primary dns ip address %v", primaryDNS)
 	}
-	if !IsValidIP(secondaryDNS) {
+	if !manager.IsValidIP(secondaryDNS) {
 		return fmt.Errorf("invalid secondary dns ip address %v", secondaryDNS)
 	}
 	var cmd *exec.Cmd
 	if strings.ToLower(iface) == "all" {
 		switch runtime.GOOS {
 		case "windows":
-			if !cd.HasCommand("netsh") {
+			if !manager.HasCommand("netsh") {
 				return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 			}
 			hasOneSet := false
-			for _, activeIface := range ActiveInterfaces {
+			for _, activeIface := range manager.ActiveInterfaces {
 				cmdPrimary := exec.Command("netsh", "interface", "ipv4", "set", "dns", "name="+activeIface, "source=static", "addr="+primaryDNS)
 				cmdSecondary := exec.Command("netsh", "interface", "ipv4", "add", "dns", "name="+activeIface, "addr="+secondaryDNS, "index=2")
 				err1 := cmdPrimary.Run()
@@ -45,11 +47,11 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 			}
 
 		case "linux":
-			if !cd.HasCommand("nmcli") {
+			if !manager.HasCommand("nmcli") {
 				return fmt.Errorf("nmcli command not found, consider installing NetworkManager or use an alternative method for your Linux distribution")
 			}
 			hasOneSet := false
-			for _, activeIface := range ActiveInterfaces {
+			for _, activeIface := range manager.ActiveInterfaces {
 				cmd = exec.Command("nmcli", "connection", "modify", activeIface, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
 				err := cmd.Run()
 				if err != nil {
@@ -65,11 +67,11 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 			//	cmd = exec.Command("nmcli", "connection", "modify", ifacename, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
 
 		case "darwin":
-			if !cd.HasCommand("networksetup") {
+			if !manager.HasCommand("networksetup") {
 				return fmt.Errorf("networksetup command not found, consider installing it")
 			}
 			hasOneSet := false
-			for _, activeIface := range ActiveInterfaces {
+			for _, activeIface := range manager.ActiveInterfaces {
 				cmd := exec.Command("networksetup", "-setdnsservers", activeIface, primaryDNS, secondaryDNS)
 				err := cmd.Run()
 				if err != nil {
@@ -89,7 +91,7 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 	} else if iface != "" {
 		switch runtime.GOOS {
 		case "windows":
-			if !cd.HasCommand("netsh") {
+			if !manager.HasCommand("netsh") {
 				return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 			}
 			cmdPrimary := exec.Command("netsh", "interface", "ipv4", "set", "dns", "name="+iface, "source=static", "addr="+primaryDNS)
@@ -103,7 +105,7 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 				return fmt.Errorf("Error setting Secondary DNS for the interface:%v.Error:%v", iface, err2.Error())
 			}
 		case "linux":
-			if !cd.HasCommand("nmcli") {
+			if !manager.HasCommand("nmcli") {
 				return fmt.Errorf("nmcli command not found, consider installing NetworkManager or use an alternative method for your Linux distribution")
 			}
 			cmd = exec.Command("nmcli", "connection", "modify", iface, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
@@ -113,7 +115,7 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 			}
 
 		case "darwin":
-			if !cd.HasCommand("networksetup") {
+			if !manager.HasCommand("networksetup") {
 				return fmt.Errorf("networksetup command not found, consider installing it")
 			}
 			cmd := exec.Command("networksetup", "-setdnsservers", iface, primaryDNS, secondaryDNS)
@@ -126,11 +128,6 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 		}
 	}
 	return nil
-}
-
-func (cd *CommandDNS) HasCommand(cmdName string) bool {
-	_, err := exec.LookPath(cmdName)
-	return err == nil
 }
 
 func (cd *CommandDNS) GetDNS(iface string) (string, string, error) {
@@ -151,7 +148,7 @@ func (cd *CommandDNS) PostSetup() error {
 }
 
 func (cd *CommandDNS) getDNSLinux() (string, string, error) {
-	if !cd.HasCommand("nmcli") {
+	if !manager.HasCommand("nmcli") {
 		return "", "", fmt.Errorf("nmcli command not found, consider installing NetworkManager or use an alternative method for your Linux distribution")
 	}
 	// Execute the nmcli command to get DNS information
@@ -182,7 +179,7 @@ func (cd *CommandDNS) getDNSLinux() (string, string, error) {
 }
 
 func (cd *CommandDNS) getDNSWindows() (string, string, error) {
-	if !cd.HasCommand("netsh") {
+	if !manager.HasCommand("netsh") {
 		return "", "", fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 	}
 	cmd := exec.Command("netsh", "interface", "ip", "show", "dns")
@@ -226,7 +223,7 @@ func (cd *CommandDNS) getDNSWindows() (string, string, error) {
 }
 
 func (cd *CommandDNS) getDNSDarwin() (string, string, error) {
-	if !cd.HasCommand("scutil") {
+	if !manager.HasCommand("scutil") {
 		return "", "", fmt.Errorf("scutil command not found for operating system: %s", runtime.GOOS)
 	}
 	cmd := exec.Command("scutil", "--dns")
