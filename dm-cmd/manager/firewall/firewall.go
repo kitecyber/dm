@@ -56,6 +56,34 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 	return nil
 }
 
+func (f *Firewall) ShowFirewall(rulename string) (string, error) {
+	switch runtime.GOOS {
+	case "windows":
+		if !manager.HasCommand("netsh") {
+			return "", fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
+		}
+		if rulename == "" {
+			rulename = "all"
+		}
+		var cmdFirewall *exec.Cmd
+		cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name="+rulename)
+		output, err := cmdFirewall.Output()
+		if err != nil {
+			return "", fmt.Errorf("error while showing firewall rule.Error:%v", err.Error())
+		}
+		return string(output), nil
+
+	case "linux":
+
+	case "darwin":
+	default:
+		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+
+	}
+
+	return "", nil
+}
+
 func validateFirewallInput(rulename, direction, action, protocol, remoteip, port string) error {
 	if rulename == "" {
 		return fmt.Errorf("invalid rule name.Rule name must not be empty")

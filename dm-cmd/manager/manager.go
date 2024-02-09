@@ -8,4 +8,5 @@ type IDNSDeviceManager interface {
 
 type IFirewallManager interface {
 	SetFirewall(rulename, direction, action, protocol, remoteip, port string) error
+	ShowFirewall(rulename string) (string, error)
 }

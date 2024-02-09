@@ -3,6 +3,7 @@ package cmd
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"log"
 
 	"github.com/kitecyber/dm/dm-cmd/manager"
@@ -27,6 +28,8 @@ func init() {
 	firewallCmd.Flags().StringVarP(&remoteip, "remoteip", "i", "any", "remoteip is a valid ipv4 ip address or valid cidr notation.Default is [any] which means all ip addresses")
 	firewallCmd.Flags().StringVarP(&port, "port", "r", "any", "port is a value between 0-65535.Default is [any] which means all ports")
 
+	showFirewallCmd.Flags().StringVarP(&ruleName, "rulename", "n", "", "a firewall rule name to be given")
+
 	rootCmd.AddCommand(firewallCmd)
 	firewallCmd.AddCommand(showFirewallCmd)
 }
@@ -36,7 +39,14 @@ var showFirewallCmd = &cobra.Command{
 	Short: "Displays firewall information",
 	Long:  "Displays current firewall information based on other inputs",
 	Run: func(cmd *cobra.Command, args []string) {
-
+		var ifw manager.IFirewallManager
+		fw := new(firewall.Firewall)
+		ifw = fw
+		output, err := ifw.ShowFirewall(ruleName)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		fmt.Println(output)
 	},
 }
 var firewallCmd = &cobra.Command{
