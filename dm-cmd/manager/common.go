@@ -6,7 +6,6 @@ import (
 	"net"
 	"os/exec"
 	"strconv"
-	"strings"
 )
 
 func GetActiveInterfaces() ([]string, error) {
@@ -37,9 +36,6 @@ func IsValidCIDR(cidr string) bool {
 }
 
 func IsValidPort(port string) bool {
-	if strings.ToLower(port) == "all" {
-		return true
-	}
 	p, err := strconv.Atoi(port)
 	if err != nil {
 		return false

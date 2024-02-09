@@ -8,10 +8,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var scope string
-var primaryDNS string
-var secondaryDNS string
-var iface string
+var (
+	scope        string
+	primaryDNS   string
+	secondaryDNS string
+	iface        string
+)
 
 func init() {
 	dnsCmd.Flags().StringVarP(&scope, "scope", "s", "system", "two types of the scopes. system|command.command is used to set through system based commands")

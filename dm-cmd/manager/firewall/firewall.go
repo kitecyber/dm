@@ -28,10 +28,16 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 			return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 		}
 		protocol = strings.ToLower(protocol)
-		if protocol == "" || protocol == "all" {
+		if protocol == "" {
 			protocol = "any"
 		}
-		cmdFirewall := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+rulename, "dir="+direction, "action="+action, "protocol="+protocol, "remoteip="+remoteip)
+		var cmdFirewall *exec.Cmd
+		// post can be set only if the protocol is tcp or udp
+		if (strings.ToLower(protocol) == "tcp" || strings.ToLower(protocol) == "udp") && port != "" {
+			cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+rulename, "dir="+direction, "action="+action, "protocol="+protocol, "remoteip="+remoteip, "localport="+port)
+		} else {
+			cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+rulename, "dir="+direction, "action="+action, "protocol="+protocol, "remoteip="+remoteip)
+		}
 		err := cmdFirewall.Run()
 		if err != nil {
 			return fmt.Errorf("error while setting firewall rule.Error:%v", err.Error())
@@ -70,14 +76,16 @@ func validateFirewallInput(rulename, direction, action, protocol, remoteip, port
 	if !hasFound {
 		return fmt.Errorf("invalid protocol")
 	}
-	if !(remoteip == "" || strings.ToLower(remoteip) == "all") {
+	if !(remoteip == "" || strings.ToLower(remoteip) == "all" || strings.ToLower(remoteip) == "any") {
 		if !manager.IsValidIPAddressOrCIDR(remoteip) {
 			return fmt.Errorf("invalid ip address or cidr notation")
 		}
 	}
 
-	if manager.IsValidPort(port) {
-		return fmt.Errorf("invalid port")
+	if port != "any" {
+		if !manager.IsValidPort(port) {
+			return fmt.Errorf("invalid port")
+		}
 	}
 	return nil
 }
