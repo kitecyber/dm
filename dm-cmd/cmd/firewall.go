@@ -28,7 +28,7 @@ func init() {
 	firewallCmd.Flags().StringVarP(&remoteip, "remoteip", "i", "any", "remoteip is a valid ipv4 ip address or valid cidr notation.Default is [any] which means all ip addresses")
 	firewallCmd.Flags().StringVarP(&port, "port", "r", "any", "port is a value between 0-65535.Default is [any] which means all ports")
 
-	showFirewallCmd.Flags().StringVarP(&ruleName, "rulename", "n", "", "a firewall rule name to be given")
+	showFirewallCmd.Flags().StringVarP(&ruleName, "rulename", "n", "all", "a firewall rule name to be given.Default is all")
 
 	rootCmd.AddCommand(firewallCmd)
 	firewallCmd.AddCommand(showFirewallCmd)
@@ -58,7 +58,9 @@ var firewallCmd = &cobra.Command{
 		fw := new(firewall.Firewall)
 		ifw = fw
 		if ruleName == "" {
-			ruleName = getSHA(direction + action + protocol + remoteip + port)
+			//ruleName = getSHA(direction + action + protocol + remoteip + port)
+			log.Fatalln("invalid rule name.It is mandatory")
+
 		}
 		err := ifw.SetFirewall(ruleName, direction, action, protocol, remoteip, port)
 		if err != nil {
