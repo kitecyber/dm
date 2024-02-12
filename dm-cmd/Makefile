@@ -2,17 +2,17 @@ GOCC=go
 
 # all: get-deps fmt darwin linux arm windows build coverage
 all:
-	env GOOS=linux GOARCH=amd64 ${GOCC} build -o ./bin/dm_linux_amd64
-	env GOOS=linux GOARCH=arm64 ${GOCC} build -o ./bin/dm_linux_arm64
-	env GOOS=linux GOARCH=386 ${GOCC} build -o ./bin/dm_linux_386
-	env GOOS=darwin GOARCH=amd64 ${GOCC} build -o ./bin/dm_darwin_amd64
-	env GOOS=darwin GOARCH=arm64 ${GOCC} build -o ./bin/dm_darwin_arm64
-	env GOOS=windows GOARCH=amd64 ${GOCC} build -o ./bin/dm_windows_amd64.exe
-	env GOOS=windows GOARCH=386 ${GOCC} build -o ./bin/dm_windows_386.exe
+	env GOOS=linux GOARCH=amd64 ${GOCC} build -o ../binaries/dm-cmd_linux_amd64 main.go
+	env GOOS=linux GOARCH=arm64 ${GOCC} build -o ../binaries/dm-cmd_linux_arm64 main.go
+	env GOOS=linux GOARCH=386 ${GOCC} build -o ../binaries/dm-cmd_linux_386 main.go
+	env GOOS=darwin GOARCH=amd64 ${GOCC} build -o ../binaries/dm-cmd_darwin_amd64 main.go
+	env GOOS=darwin GOARCH=arm64 ${GOCC} build -o ../binaries/dm-cmd_darwin_arm64 main.go
+	env GOOS=windows GOARCH=amd64 ${GOCC} build -o ../binaries/dm-cmd_windows_amd64.exe main.go
+	env GOOS=windows GOARCH=386 ${GOCC} build -o ../binaries/dm-cmd_windows_386.exe main.go
 
 clean:
-	rm -rf ./bin 
+	rm -rf ../binaries 
 
 build:
-	${GOCC} build -o ./bin/dm
+	${GOCC} build -o ../binaries/dm
 
