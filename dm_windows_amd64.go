@@ -8,8 +8,8 @@ import (
 	"github.com/getlantern/byteexec"
 )
 
-//go:embed binaries/dm_windows_amd64.exe
-var sysproxy []byte
+//go:embed binaries/windows_amd64/dm-cmd.exe
+var dm []byte
 
 func ensureElevatedOnDarwin(be *byteexec.Exec, prompt string, iconFullPath string) (err error) {
 	return nil

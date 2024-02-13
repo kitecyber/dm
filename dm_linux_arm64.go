@@ -8,7 +8,7 @@ import (
 	"github.com/getlantern/byteexec"
 )
 
-//go:embed binaries/dm_linux_arm64
+//go:embed binaries/linux_arm64/dm-cmd
 var dm []byte
 
 func ensureElevatedOnDarwin(be *byteexec.Exec, prompt string, iconFullPath string) (err error) {
@@ -17,6 +17,6 @@ func ensureElevatedOnDarwin(be *byteexec.Exec, prompt string, iconFullPath strin
 
 func detach(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
+		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
 	}
 }

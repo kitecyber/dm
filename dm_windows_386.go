@@ -8,7 +8,7 @@ import (
 	"github.com/getlantern/byteexec"
 )
 
-//go:embed binaries/dm_windows_386.exe
+//go:embed binaries/windows_386/dm-cmd.exe
 var dm []byte
 
 func ensureElevatedOnDarwin(be *byteexec.Exec, prompt string, iconFullPath string) (err error) {
