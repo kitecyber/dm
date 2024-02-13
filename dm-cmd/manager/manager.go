@@ -3,6 +3,7 @@ package manager
 type IDNSDeviceManager interface {
 	SetDNS(iface string, primary string, secondary string) error
 	GetDNS(string) (string, string, error)
+	UnSetDNS(iface string) error
 	PostSetup() error
 }
 

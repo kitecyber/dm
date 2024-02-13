@@ -1,8 +1,10 @@
 package dns
 
 import (
+	"bufio"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"regexp"
 	"runtime"
@@ -59,6 +61,30 @@ func (gd *GlobalDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 	default:
 		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
+	return nil
+}
+
+func (gd *GlobalDNS) UnSetDNS(iface string) error {
+	switch runtime.GOOS {
+	case "windows":
+		if !manager.HasCommand("netsh") {
+			return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
+		}
+		for _, iface := range manager.ActiveInterfaces {
+			cmdPrimary := exec.Command("netsh", "interface", "ipv4", "delete", "dns", iface, "all")
+			err := cmdPrimary.Run()
+			if err != nil {
+				log.Printf("Error un-setting Primary DNS for the interface:%v.Error:%v", iface, err.Error())
+				return err
+			}
+		}
+	case "linux", "darwin":
+		return gd.unsetDNSForLinuxAndDarwin()
+
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+
 	return nil
 }
 
@@ -146,5 +172,48 @@ func (gd *GlobalDNS) parseDNSOutput(output string) (string, string, error) {
 }
 
 func (gd *GlobalDNS) PostSetup() error {
+	return nil
+}
+
+func (gd *GlobalDNS) unsetDNSForLinuxAndDarwin() error {
+	file, err := os.Open("/etc/resolv.conf")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	// Create a slice to hold modified lines
+	var modifiedLines []string
+	// Scan each line of the file
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Check if the line contains DNS server addresses (nameserver)
+		if !strings.HasPrefix(line, "nameserver") {
+			// If not, add the line to modifiedLines
+			modifiedLines = append(modifiedLines, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	// Open the /etc/resolv.conf file for writing
+	writeFile, err := os.Create("/etc/resolv.conf")
+	if err != nil {
+		return err
+	}
+	defer writeFile.Close()
+
+	// Write the modified lines back to the file
+	writer := bufio.NewWriter(writeFile)
+	for _, line := range modifiedLines {
+		_, err := writer.WriteString(line + "\n")
+		if err != nil {
+			return err
+		}
+	}
+	// Flush any buffered data to ensure all content is written
+	if err := writer.Flush(); err != nil {
+		return err
+	}
 	return nil
 }

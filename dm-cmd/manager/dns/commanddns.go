@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os/exec"
@@ -52,8 +53,15 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 			}
 			hasOneSet := false
 			for _, activeIface := range manager.ActiveInterfaces {
-				cmd = exec.Command("nmcli", "connection", "modify", activeIface, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
-				err := cmd.Run()
+				connName, err := getConnectionNameforLinux(activeIface)
+				if err != nil {
+					log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", activeIface, err.Error())
+				}
+				if err == nil {
+					hasOneSet = true
+				}
+				cmd = exec.Command("nmcli", "connection", "modify", connName, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
+				err = cmd.Run()
 				if err != nil {
 					log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", activeIface, err.Error())
 				}
@@ -108,8 +116,12 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 			if !manager.HasCommand("nmcli") {
 				return fmt.Errorf("nmcli command not found, consider installing NetworkManager or use an alternative method for your Linux distribution")
 			}
-			cmd = exec.Command("nmcli", "connection", "modify", iface, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
-			err := cmd.Run()
+			connName, err := getConnectionNameforLinux(iface)
+			if err != nil {
+				return err
+			}
+			cmd = exec.Command("nmcli", "connection", "modify", connName, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
+			err = cmd.Run()
 			if err != nil {
 				return err
 			}
@@ -141,6 +153,123 @@ func (cd *CommandDNS) GetDNS(iface string) (string, string, error) {
 	default:
 		return "", "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
+}
+
+func (cd *CommandDNS) UnSetDNS(iface string) error {
+	var cmd *exec.Cmd
+	if strings.ToLower(iface) == "all" {
+		switch runtime.GOOS {
+		case "windows":
+			if !manager.HasCommand("netsh") {
+				return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
+			}
+			for _, iface := range manager.ActiveInterfaces {
+				cmdPrimary := exec.Command("netsh", "interface", "ipv4", "delete", "dns", iface, "all")
+				err := cmdPrimary.Run()
+				if err != nil {
+					log.Printf("Error un-setting Primary DNS for the interface:%v.Error:%v", iface, err.Error())
+					return err
+				}
+			}
+
+		case "linux":
+			if !manager.HasCommand("nmcli") {
+				return fmt.Errorf("nmcli command not found, consider installing NetworkManager or use an alternative method for your Linux distribution")
+			}
+			for _, activeIface := range manager.ActiveInterfaces {
+				connName, err := getConnectionNameforLinux(activeIface)
+				if err != nil {
+					return err
+				}
+				cmd = exec.Command("nmcli", "connection", "modify", connName, "ipv4.dns")
+				err = cmd.Run()
+				if err != nil {
+					log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", activeIface, err.Error())
+					return err
+				}
+			}
+
+		case "darwin":
+			if !manager.HasCommand("networksetup") {
+				return fmt.Errorf("networksetup command not found, consider installing it")
+			}
+			for _, activeIface := range manager.ActiveInterfaces {
+
+				// Remove primary DNS
+				removePrimaryDNSCmd := exec.Command("networksetup", "-setdnsservers", activeIface, "empty")
+
+				// Remove secondary DNS
+				removeSecondaryDNSCmd := exec.Command("networksetup", "-setdnsservers", activeIface, "empty")
+
+				// Run commands
+				if err := removePrimaryDNSCmd.Run(); err != nil {
+					log.Printf("Error un-setting Secondary DNS for the interface:%v.Error:%v", activeIface, err.Error())
+					return err
+				}
+
+				if err := removeSecondaryDNSCmd.Run(); err != nil {
+					log.Printf("Error un-setting Secondary DNS for the interface:%v.Error:%v", activeIface, err.Error())
+					return err
+				}
+			}
+
+		default:
+			return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+		}
+	} else if iface != "" {
+		switch runtime.GOOS {
+		case "windows":
+			if !manager.HasCommand("netsh") {
+				return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
+			}
+			cmdPrimary := exec.Command("netsh", "interface", "ipv4", "delete", "dns", iface, "all")
+			err := cmdPrimary.Run()
+			if err != nil {
+				log.Printf("Error un-setting Primary DNS for the interface:%v.Error:%v", iface, err.Error())
+				return err
+			}
+
+		case "linux":
+			if !manager.HasCommand("nmcli") {
+				return fmt.Errorf("nmcli command not found, consider installing NetworkManager or use an alternative method for your Linux distribution")
+			}
+			connName, err := getConnectionNameforLinux(iface)
+			if err != nil {
+				return err
+			}
+			cmd = exec.Command("nmcli", "connection", "modify", connName, "ipv4.dns")
+			err = cmd.Run()
+			if err != nil {
+				log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", iface, err.Error())
+				return err
+			}
+
+		case "darwin":
+			if !manager.HasCommand("networksetup") {
+				return fmt.Errorf("networksetup command not found, consider installing it")
+			}
+			// Remove primary DNS
+			removePrimaryDNSCmd := exec.Command("networksetup", "-setdnsservers", iface, "empty")
+
+			// Remove secondary DNS
+			removeSecondaryDNSCmd := exec.Command("networksetup", "-setdnsservers", iface, "empty")
+
+			// Run commands
+			if err := removePrimaryDNSCmd.Run(); err != nil {
+				log.Printf("Error un-setting Secondary DNS for the interface:%v.Error:%v", iface, err.Error())
+				return err
+			}
+
+			if err := removeSecondaryDNSCmd.Run(); err != nil {
+				log.Printf("Error un-setting Secondary DNS for the interface:%v.Error:%v", iface, err.Error())
+				return err
+			}
+
+		default:
+			return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+		}
+	}
+	return nil
 }
 
 func (cd *CommandDNS) PostSetup() error {
@@ -261,4 +390,29 @@ func (cd *CommandDNS) getDNSDarwin() (string, string, error) {
 	}
 
 	return primaryDNS, secondaryDNS, nil
+}
+
+func getConnectionNameforLinux(interfaceName string) (string, error) {
+	// Run nmcli to get the connection name associated with the interface
+	cmd := exec.Command("nmcli", "device", "show", interfaceName)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	// Parse the output to find the connection name
+	lines := strings.Split(out.String(), "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "GENERAL.CONNECTION") {
+			parts := strings.Split(line, ":")
+			if len(parts) >= 2 {
+				return strings.TrimSpace(parts[1]), nil
+			}
+		}
+	}
+
+	// Connection name not found
+	return "", fmt.Errorf("connection name not found for interface %s", interfaceName)
 }
