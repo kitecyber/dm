@@ -10,7 +10,7 @@ import (
 	"github.com/getlantern/elevate"
 )
 
-//go:embed binaries/darwin_amd64/dm-cmd
+//go:embed binaries/dm-cmd_darwin_amd64
 var dm []byte
 
 func ensureElevatedOnDarwin(be *byteexec.Exec, prompt string, iconFullPath string) (err error) {
