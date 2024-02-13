@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -98,19 +99,27 @@ func (gd *GlobalDNS) getDNSWindows() (string, string, error) {
 	lines := strings.Split(string(output), "\r\n")
 	primaryDNS := ""
 	secondaryDNS := ""
+	pattern := `\b(?:\d{1,3}\.){3}\d{1,3}\b`
+	regex := regexp.MustCompile(pattern)
 	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[0] == "Server:" {
-			server := strings.TrimSpace(fields[1])
-			if primaryDNS == "" {
-				primaryDNS = server
-			} else {
-				secondaryDNS = server
-				break
+		if strings.Contains(line, "Configuration for interface") || strings.Contains(line, "None") || strings.Contains(line, "Primary only") {
+			continue
+		} else {
+			//fmt.Println(line)
+			matches := regex.FindAllString(line, -1)
+			for _, match := range matches {
+				if primaryDNS == "" {
+					primaryDNS = match
+				} else {
+					secondaryDNS = match
+				}
 			}
 		}
-	}
+		if primaryDNS != "" && secondaryDNS != "" {
+			return primaryDNS, secondaryDNS, nil
+		}
 
+	}
 	return primaryDNS, secondaryDNS, nil
 }
 

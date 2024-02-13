@@ -73,7 +73,8 @@ func OnFirewall(name, protocol, action, direction, remoteip, port string) error 
 		return fmt.Errorf("call EnsureHelperToolPresent() first")
 	}
 
-	cmd := be.Command("firewall", "-n", name, "-p", protocol, "-a", action, "-d", direction, "-p", port, "-i", remoteip)
+	cmd := be.Command("firewall", "-n", name, "-p", protocol, "-a", action, "-d", direction, "-r", port, "-i", remoteip)
+	fmt.Println(cmd.String())
 	return cmd.Run()
 }
 
