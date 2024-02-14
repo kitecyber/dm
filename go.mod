@@ -1,4 +1,4 @@
-module dm
+module github.com/kitecyber/dm
 
 go 1.21.6
 
