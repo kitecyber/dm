@@ -32,6 +32,19 @@ func main() {
 		return
 	}
 
+	out, err := dm.ShowDNS()
+	if err != nil {
+		fmt.Printf("Error set dns: %s\n", err)
+		return
+	}
+	fmt.Println(string(out))
+	primary, secondary, err := dm.GetDNS()
+	if err != nil {
+		fmt.Printf("Error fetching dns: %s\n", err)
+		return
+	}
+	fmt.Println(primary, secondary)
+
 	fmt.Println("Firewall and dns set, hit enter to continue (or kill the parent process)...")
 	var i int
 	fmt.Scanf("%d\n", &i)

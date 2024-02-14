@@ -55,13 +55,11 @@ func ShowDNS() (string, error) {
 	if be == nil {
 		return "", fmt.Errorf("call EnsureHelperToolPresent() first")
 	}
-
 	cmd := be.Command("dns", "show")
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", err
 	}
-
 	return string(out), nil
 }
 
@@ -70,14 +68,12 @@ func GetDNS() (string, string, error) {
 	if be == nil {
 		return "", "", fmt.Errorf("call EnsureHelperToolPresent() first")
 	}
-
 	cmd := be.Command("dns", "show")
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", "", err
 	}
 	primaryDNS, secondaryDNS := "", ""
-
 	strs := strings.Split(string(out), "\n")
 	if len(strs) == 2 {
 		primary := strings.Split(strs[0], ":")
@@ -90,9 +86,8 @@ func GetDNS() (string, string, error) {
 		}
 
 	} else {
-		return "", "", fmt.Errorf("dns configuration has not been found")
+		return "", "", fmt.Errorf("dns configuration has not found")
 	}
-
 	return primaryDNS, secondaryDNS, nil
 }
 
@@ -105,7 +100,6 @@ func OnFirewall(name, protocol, action, direction, remoteip, port string) error 
 	}
 
 	cmd := be.Command("firewall", "-n", name, "-p", protocol, "-a", action, "-d", direction, "-r", port, "-i", remoteip)
-	fmt.Println(cmd.String())
 	return cmd.Run()
 }
 
@@ -114,13 +108,11 @@ func ShowFirewall(name string) (string, error) {
 	if be == nil {
 		return "", fmt.Errorf("call EnsureHelperToolPresent() first")
 	}
-
 	cmd := be.Command("firewall", "show", "-n", name)
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", err
 	}
-
 	return string(out), nil
 }
 
