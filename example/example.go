@@ -1,9 +1,10 @@
 package main
 
 import (
-	"dm"
 	"fmt"
 	"path/filepath"
+
+	"github.com/kitecyber/dm"
 
 	"github.com/getlantern/golog"
 )
