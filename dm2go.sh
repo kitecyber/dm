@@ -2,7 +2,7 @@
 
 ###############################################################################
 #
-# This script regenerates the source files that embed the sysproxy-cmd executable.
+# This script regenerates the source files that embed the dm-cmd executable.
 #
 ###############################################################################
 
@@ -17,7 +17,7 @@ then
   die "$0: Please set BNS_CERT and BNS_CERT_PASS to the bns_cert.p12 signing key and the password for that key"
 fi
 
-BINPATH=./dm-cmd/bin
+BINPATH=./binaries
 
 # Check for a recent version of osslsigncode that can handle 32-bit Windows
 # binaries.
@@ -33,5 +33,7 @@ BINPATH=./dm-cmd/bin
 #cp $BINPATH/windows/sysproxy_386.exe binaries/windows
 #cp $BINPATH/windows/sysproxy_amd64.exe binaries/windows
 
-#codesign --options runtime --strict --timestamp --force --deep -r="designated => anchor trusted and identifier com.getlantern.lantern" -s "Developer ID Application: Innovate Labs LLC (4FYC28AXA2)" -v $BINPATH/darwin
-#cp $BINPATH/darwin binaries
+codesign --options runtime --strict --timestamp --force --deep -s "Developer ID Application: Cerebral Systems Inc. (93DW2WP5G8)" -v $BINPATH/dm-cmd_darwin_amd64
+codesign --options runtime --strict --timestamp --force --deep -s "Developer ID Application: Cerebral Systems Inc. (93DW2WP5G8)" -v $BINPATH/dm-cmd_darwin_arm64
+/usr/bin/codesign -dv $BINPATH/dm-cmd_darwin_amd64
+/usr/bin/codesign -dv $BINPATH/dm-cmd_darwin_arm64

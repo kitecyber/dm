@@ -24,7 +24,12 @@ func ensureElevatedOnDarwin(be *byteexec.Exec, prompt string, iconFullPath strin
 		return
 	}
 	cmd := elevate.WithPrompt(prompt).WithIcon(iconFullPath).Command(be.Filename, "setuid")
-	return run(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("unable to execute %v: %s\n%s", cmd.Path, err, string(out))
+	}
+
+	return nil
 }
 
 func detach(cmd *exec.Cmd) {
