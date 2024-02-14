@@ -3,6 +3,7 @@ package dm
 import (
 	_ "embed"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -64,7 +65,7 @@ func ShowDNS() (string, error) {
 }
 
 // Gets DNS information.
-func GetDNS() (string, string, error) {
+func GetDNS() (primaryDNS string, secondaryDNS string, err error) {
 	if be == nil {
 		return "", "", fmt.Errorf("call EnsureHelperToolPresent() first")
 	}
@@ -73,7 +74,6 @@ func GetDNS() (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	primaryDNS, secondaryDNS := "", ""
 	strs := strings.Split(string(out), "\n")
 	if len(strs) == 2 {
 		primary := strings.Split(strs[0], ":")
@@ -116,21 +116,84 @@ func ShowFirewall(name string) (string, error) {
 	return string(out), nil
 }
 
-type resultType struct {
-	out []byte
-	err error
+func GetFirewall(name string) (action, direction, protocol, remoteIP, port string, err error) {
+	if be == nil {
+		return "", "", "", "", "", fmt.Errorf("call EnsureHelperToolPresent() first")
+	}
+	cmd := be.Command("firewall", "show", "-n", name)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", "", "", "", "", err
+	}
+	m, err := firewallToMap(string(out))
+	if err != nil {
+		return "", "", "", "", "", err
+	}
+	//fmt.Println(m)
+	return m["action"], m["direction"], m["protocol"], m["remoteIP"], m["port"], nil
 }
 
-func allEquals(expected string, actual string) bool {
-	if (expected == "") != (strings.TrimSpace(actual) == "") { // XOR
-		return false
-	}
-	lines := strings.Split(actual, "\n")
-	for _, l := range lines {
-		trimmed := strings.TrimSpace(l)
-		if trimmed != "" && trimmed != expected {
-			return false
+func firewallToMap(output string) (map[string]string, error) {
+	outputMap := make(map[string]string, 0)
+	switch runtime.GOOS {
+	case "windows":
+		lines := strings.Split(output, "\n")
+		for _, line := range lines {
+			//fmt.Println("---->", line)
+			lineSep := strings.Split(line, ":")
+			if len(lineSep) == 2 {
+				switch lineSep[0] {
+				case "Direction":
+					outputMap["direction"] = strings.TrimSpace(strings.ToLower(lineSep[1]))
+				case "Action":
+					outputMap["action"] = strings.TrimSpace(strings.ToLower(lineSep[1]))
+				case "Protocol":
+					outputMap["protocol"] = strings.TrimSpace(strings.ToLower(lineSep[1]))
+				case "RemoteIP":
+					outputMap["remoteIP"] = strings.TrimSpace(strings.ToLower(lineSep[1]))
+				case "RemotePort":
+					outputMap["port"] = strings.TrimSpace(strings.ToLower(lineSep[1]))
+				}
+			}
 		}
+		if len(outputMap) > 0 {
+			return outputMap, nil
+		}
+		return outputMap, fmt.Errorf("no data found")
+
+	case "linux":
+		return nil, fmt.Errorf("not implemented")
+
+	case "darwin":
+		strs := strings.Split(output, " ")
+		for i, str := range strs {
+
+			switch str {
+			case "pass", "block":
+				outputMap["action"] = str
+			case "in", "out":
+				outputMap["direction"] = str
+			case "proto":
+				if len(strs) >= i+1 {
+					outputMap["protocol"] = strs[i+1]
+				}
+			case "port":
+				if len(strs) >= i+1 {
+					outputMap["port"] = strs[i+1]
+				}
+			case "to":
+				if len(strs) >= i+1 {
+					outputMap["remoteIP"] = strs[i+1]
+				}
+			}
+			if len(outputMap) > 0 {
+				return outputMap, nil
+			}
+			return outputMap, fmt.Errorf("no data found")
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
-	return true
+	return nil, nil
 }

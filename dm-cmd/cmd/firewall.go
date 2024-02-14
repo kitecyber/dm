@@ -27,9 +27,7 @@ func init() {
 	firewallCmd.Flags().StringVarP(&protocol, "protocol", "p", "any", "a protocol name to be given.The following are the list of the supported protocols tcp|ssh|ftp|sftp|scp|udp|dns|dhcp|imap|smtp|pop|snpm|sip|rtp|rtcp.Default is [any] which means all protocols")
 	firewallCmd.Flags().StringVarP(&remoteip, "remoteip", "i", "any", "remoteip is a valid ipv4 ip address or valid cidr notation.Default is [any] which means all ip addresses")
 	firewallCmd.Flags().StringVarP(&port, "port", "r", "any", "port is a value between 0-65535.Default is [any] which means all ports")
-
 	showFirewallCmd.Flags().StringVarP(&ruleName, "rulename", "n", "all", "a firewall rule name to be given.Default is all")
-
 	rootCmd.AddCommand(firewallCmd)
 	firewallCmd.AddCommand(showFirewallCmd)
 }
@@ -49,6 +47,7 @@ var showFirewallCmd = &cobra.Command{
 		fmt.Println(output)
 	},
 }
+
 var firewallCmd = &cobra.Command{
 	Use:   "firewall",
 	Short: "firewall is to configure firewall rule",

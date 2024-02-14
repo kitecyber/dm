@@ -20,11 +20,17 @@ func main() {
 		fmt.Printf("Error EnsureHelperToolPresent: %s\n", err)
 		return
 	}
-	err = dm.OnFirewall("demo-example-1", "udp", "allow", "in", "12.13.14.15", "34343")
+	err = dm.OnFirewall("demo-example-4", "udp", "allow", "in", "12.13.14.15", "34343")
 	if err != nil {
 		fmt.Printf("Error set firewall: %s\n", err)
 		return
 	}
+	action, direction, protocol, remoteIP, port, err := dm.GetFirewall("demo-example-4")
+	if err != nil {
+		fmt.Println("Error show firewall:", err.Error())
+		return
+	}
+	fmt.Println("action:", action, "direction:", direction, "protocol:", protocol, "remoteIP:", remoteIP, "port:", port)
 
 	err = dm.OnDNS("1.1.1.1", "8.8.4.4")
 	if err != nil {
