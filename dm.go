@@ -65,6 +65,37 @@ func ShowDNS() (string, error) {
 	return string(out), nil
 }
 
+// Gets DNS information.
+func GetDNS() (string, string, error) {
+	if be == nil {
+		return "", "", fmt.Errorf("call EnsureHelperToolPresent() first")
+	}
+
+	cmd := be.Command("dns", "show")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", "", err
+	}
+	primaryDNS, secondaryDNS := "", ""
+
+	strs := strings.Split(string(out), "\n")
+	if len(strs) == 2 {
+		primary := strings.Split(strs[0], ":")
+		secondary := strings.Split(strs[1], ":")
+		if len(primary) == 2 {
+			primaryDNS = strings.TrimSpace(primary[1])
+		}
+		if len(secondary) == 2 {
+			secondaryDNS = strings.TrimSpace(secondary[1])
+		}
+
+	} else {
+		return "", "", fmt.Errorf("dns configuration has not been found")
+	}
+
+	return primaryDNS, secondaryDNS, nil
+}
+
 // OnFirewall sets firewall information
 func OnFirewall(name, protocol, action, direction, remoteip, port string) error {
 	mu.Lock()
