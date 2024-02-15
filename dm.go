@@ -39,8 +39,8 @@ func EnsureHelperToolPresent(path string, prompt string, iconFullPath string) (e
 	return ensureElevatedOnDarwin(be, prompt, iconFullPath)
 }
 
-// OnDNS sets primary and secondary dns
-func OnDNS(primary, secondary string) error {
+// SetDNS sets primary and secondary dns
+func SetDNS(primary, secondary string) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if be == nil {
@@ -49,6 +49,27 @@ func OnDNS(primary, secondary string) error {
 
 	cmd := be.Command("dns", "--pd", primary, "--sd", secondary)
 	return cmd.Run()
+}
+
+// UnSetDNS is to un-set dns
+func UnSetDNS(iface string) error {
+	if be == nil {
+		return fmt.Errorf("call EnsureHelperToolPresent() first")
+	}
+	if iface == "" {
+		cmd := be.Command("dns", "remove")
+		err := cmd.Run()
+		if err != nil {
+			return err
+		}
+	} else {
+		cmd := be.Command("dns", "remove", "-n", iface)
+		err := cmd.Run()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Show gets DNS information.
@@ -91,8 +112,8 @@ func GetDNS() (primaryDNS string, secondaryDNS string, err error) {
 	return primaryDNS, secondaryDNS, nil
 }
 
-// OnFirewall sets firewall information
-func OnFirewall(name, protocol, action, direction, remoteip, port string) error {
+// SetFirewall sets firewall information
+func SetFirewall(name, protocol, action, direction, remoteip, port string) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if be == nil {
@@ -101,6 +122,18 @@ func OnFirewall(name, protocol, action, direction, remoteip, port string) error 
 
 	cmd := be.Command("firewall", "-n", name, "-p", protocol, "-a", action, "-d", direction, "-r", port, "-i", remoteip)
 	return cmd.Run()
+}
+
+func UnSetFirewall(name string) error {
+	if be == nil {
+		return fmt.Errorf("call EnsureHelperToolPresent() first")
+	}
+	cmd := be.Command("firewall", "remove", "-n", name)
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Show get the firewall information based on name
