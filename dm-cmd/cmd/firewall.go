@@ -28,8 +28,11 @@ func init() {
 	firewallCmd.Flags().StringVarP(&remoteip, "remoteip", "i", "any", "remoteip is a valid ipv4 ip address or valid cidr notation.Default is [any] which means all ip addresses")
 	firewallCmd.Flags().StringVarP(&port, "port", "r", "any", "port is a value between 0-65535.Default is [any] which means all ports")
 	showFirewallCmd.Flags().StringVarP(&ruleName, "rulename", "n", "all", "a firewall rule name to be given.Default is all")
+	unSetFirewallCmd.Flags().StringVarP(&ruleName, "rulename", "n", "", "a firewall rule name to be given")
+
 	rootCmd.AddCommand(firewallCmd)
 	firewallCmd.AddCommand(showFirewallCmd)
+	firewallCmd.AddCommand(unSetFirewallCmd)
 }
 
 var showFirewallCmd = &cobra.Command{
@@ -45,6 +48,25 @@ var showFirewallCmd = &cobra.Command{
 			log.Fatalln(err)
 		}
 		fmt.Println(output)
+	},
+}
+
+var unSetFirewallCmd = &cobra.Command{
+	Use:   "remove",
+	Short: "Removes firewall configuration",
+	Long:  "Removes firewall configuration based on the rule name",
+	Run: func(cmd *cobra.Command, args []string) {
+		if ruleName == "" || ruleName == "any" || ruleName == "all" {
+			log.Fatalln("invalid firewall rule name")
+		}
+		var ifw manager.IFirewallManager
+		fw := new(firewall.Firewall)
+		ifw = fw
+		err := ifw.UnSetFirewall(ruleName)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		fmt.Println("firewall successfully unset/removed")
 	},
 }
 

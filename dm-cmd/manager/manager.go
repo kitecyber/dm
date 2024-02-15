@@ -9,6 +9,7 @@ type IDNSDeviceManager interface {
 
 type IFirewallManager interface {
 	SetFirewall(rulename, direction, action, protocol, remoteip, port string) error
+	UnSetFirewall(rulename string) error
 	ShowFirewall(rulename string) (string, error)
 	PostSetup() error
 }

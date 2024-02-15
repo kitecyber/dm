@@ -90,6 +90,55 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 	return nil
 }
 
+func (f *Firewall) UnSetFirewall(rulename string) error {
+	if rulename == "" {
+		return fmt.Errorf("invalid firewall rule name")
+	}
+	switch runtime.GOOS {
+	case "windows":
+		if !manager.HasCommand("netsh") {
+			return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
+		}
+
+		if ok, err := firewallRuleExistsWindows(rulename); !ok {
+			if err != nil {
+				return fmt.Errorf("error in firewall rule:%v", rulename)
+			}
+			return fmt.Errorf("no firewall exists with the given rule:%v", rulename)
+		}
+		var cmdFirewall *exec.Cmd
+		// post can be set only if the protocol is tcp or udp
+		cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name="+rulename)
+
+		err := cmdFirewall.Run()
+		if err != nil {
+			return fmt.Errorf("error while setting firewall rule.Error:%v", err.Error())
+		}
+	case "linux":
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	case "darwin":
+		if ok, err := firewallAnchorExistsDarwin(rulename); !ok || err != nil {
+			return fmt.Errorf("firewall rule does not exist or some err.rule:%v,%v", rulename, err)
+		} else {
+			if err != nil {
+				return err
+			}
+		}
+		// sudo pfctl -a my_anchor -F rules
+		// this deletes a rule based on the anchor. this application must ensure each rule has a saperate anchor
+		cmd := exec.Command("pfctl", "-a", rulename, "-F", "rules")
+		err := cmd.Run()
+		if err != nil {
+			return fmt.Errorf("error while deleting firewall rule.Error:%v", err.Error())
+		}
+
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+
+	}
+	return nil
+}
+
 func (f *Firewall) ShowFirewall(rulename string) (string, error) {
 	switch runtime.GOOS {
 	case "windows":

@@ -23,9 +23,12 @@ func init() {
 
 	showCmd.Flags().StringVarP(&scope, "scope", "s", "system", "two types of the scopes. system|command")
 	showCmd.Flags().StringVarP(&iface, "interface", "i", "system", "provide interfaces based on the system")
+	unsetDns.Flags().StringVarP(&scope, "scope", "s", "system", "two types of the scopes. system|command")
+	unsetDns.Flags().StringVarP(&iface, "interface", "i", "system", "provide interfaces based on the system")
 
 	rootCmd.AddCommand(dnsCmd)
 	dnsCmd.AddCommand(showCmd)
+	dnsCmd.AddCommand(unsetDns)
 }
 
 var showCmd = &cobra.Command{
@@ -84,6 +87,36 @@ var dnsCmd = &cobra.Command{
 				log.Fatalln(err)
 			}
 			println("Primary and secondary DNS servers set successfully.")
+		} else {
+			log.Fatalln("undefined scope.Scope can be system|command")
+		}
+	},
+}
+var unsetDns = &cobra.Command{
+	Use:   "remove",
+	Short: "Remove dns information",
+	Long:  "Removes current dns information based on interface or system level",
+	Run: func(cmd *cobra.Command, args []string) {
+		var idm manager.IDNSDeviceManager
+		if scope == "system" {
+			idm = new(dns.GlobalDNS)
+			err := idm.UnSetDNS("system")
+			if err != nil {
+				log.Fatalln(err)
+			} else {
+				println("DNS has been unset successfully")
+			}
+		} else if scope == "command" {
+			if iface == "" {
+				log.Fatalln("interface cannot be empty")
+			}
+			idm = new(dns.CommandDNS)
+			err := idm.UnSetDNS(iface)
+			if err != nil {
+				log.Fatalln(err)
+			} else {
+				println("DNS has been unset successfully")
+			}
 		} else {
 			log.Fatalln("undefined scope.Scope can be system|command")
 		}

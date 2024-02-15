@@ -71,10 +71,11 @@ func (gd *GlobalDNS) UnSetDNS(iface string) error {
 			return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 		}
 		for _, iface := range manager.ActiveInterfaces {
-			cmdPrimary := exec.Command("netsh", "interface", "ipv4", "delete", "dns", iface, "all")
+			fmt.Println("--->", iface)
+			cmdPrimary := exec.Command("netsh", "interface", "ipv4", "delete", "dns", iface, "all", "validate=no")
 			err := cmdPrimary.Run()
 			if err != nil {
-				log.Printf("Error un-setting Primary DNS for the interface:%v.Error:%v", iface, err.Error())
+				log.Printf("Error un-setting dns for the interface:%v.Error:%v", iface, err.Error())
 				return err
 			}
 		}
