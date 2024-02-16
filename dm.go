@@ -2,6 +2,7 @@ package dm
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"runtime"
 	"strings"
@@ -112,6 +113,35 @@ func GetDNS() (primaryDNS string, secondaryDNS string, err error) {
 	return primaryDNS, secondaryDNS, nil
 }
 
+// Gets DNS information.
+func GetDNSToJson() (string, error) {
+	if be == nil {
+		return "", fmt.Errorf("call EnsureHelperToolPresent() first")
+	}
+	cmd := be.Command("dns", "show")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+	jsonStr := `{`
+	strs := strings.Split(string(out), "\n")
+	if len(strs) == 2 {
+		primary := strings.Split(strs[0], ":")
+		secondary := strings.Split(strs[1], ":")
+		if len(primary) == 2 {
+			jsonStr = jsonStr + `"primary":` + `"` + strings.TrimSpace(primary[1]) + `"`
+		}
+		if len(secondary) == 2 {
+			jsonStr += `,"secondary":` + `"` + strings.TrimSpace(secondary[1]) + `"`
+		}
+		jsonStr = jsonStr + `}`
+
+	} else {
+		return "", fmt.Errorf("dns configuration has not found")
+	}
+	return jsonStr, nil
+}
+
 // SetFirewall sets firewall information
 func SetFirewall(name, protocol, action, direction, remoteip, port string) error {
 	mu.Lock()
@@ -164,6 +194,27 @@ func GetFirewall(name string) (action, direction, protocol, remoteIP, port strin
 	}
 	//fmt.Println(m)
 	return m["action"], m["direction"], m["protocol"], m["remoteIP"], m["port"], nil
+}
+
+func GetFirewallToJson(name string) (string, error) {
+	if be == nil {
+		return "", fmt.Errorf("call EnsureHelperToolPresent() first")
+	}
+	cmd := be.Command("firewall", "show", "-n", name)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+	m, err := firewallToMap(string(out))
+	if err != nil {
+		return "", err
+	}
+	jsonData, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+
+	return string(jsonData), nil
 }
 
 func firewallToMap(output string) (map[string]string, error) {
