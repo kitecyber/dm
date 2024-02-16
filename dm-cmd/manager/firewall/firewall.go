@@ -2,6 +2,7 @@ package firewall
 
 import (
 	"fmt"
+	"log"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -52,10 +53,71 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 			return fmt.Errorf("error while setting firewall rule.Error:%v", err.Error())
 		}
 	case "linux":
-		if strings.ToLower(action) == "block" {
-			action = "deny"
+		if !manager.HasCommand("iptables") {
+			return fmt.Errorf("iptables command not found for operating system: %s", runtime.GOOS)
 		}
-		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+
+		createChainCmd := exec.Command("iptables", "-N", rulename)
+		if err := createChainCmd.Run(); err != nil {
+			log.Println("Rule name already exists.Error creating rule name:", err)
+			return err
+		}
+		cmdmap := make(map[string]string)
+		args := make([]string, 0)
+
+		cmdmap["-A"] = rulename
+		args = append(args, "-A", rulename)
+
+		if protocol == "all" || protocol == "any" {
+			protocol = "all"
+			args = append(args, "-p", "all")
+
+		} else {
+			args = append(args, "-p", protocol)
+		}
+
+		if port == "all" || port == "any" {
+			port = ""
+		} else {
+			if direction == "in" {
+				args = append(args, "--dport", port)
+			} else if direction == "out" {
+				//args = append(args, "--sport", port)
+			}
+		}
+
+		if remoteip == "all" || remoteip == "any" {
+			remoteip = ""
+		} else {
+			if direction == "in" {
+				args = append(args, "-d", remoteip)
+			} else if direction == "out" {
+				//args = append(args, "-s", remoteip)
+			}
+		}
+
+		if strings.ToLower((action)) == "allow" {
+			action = "ACCEPT"
+			args = append(args, "-j", "ACCEPT")
+		}
+		if strings.ToLower(action) == "block" {
+			action = "DROP"
+			args = append(args, "-j", "DROP")
+
+		}
+
+		args = append(args, "-m", "comment", "--comment", direction)
+
+		var cmd *exec.Cmd
+
+		cmd = exec.Command("iptables", args...)
+
+		log.Println("Firewall Rule Command:", cmd.String())
+		_, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Println("Error setting up firewall rule:", err)
+			return err
+		}
 
 	case "darwin":
 		if strings.ToLower(action) == "allow" {
@@ -114,8 +176,25 @@ func (f *Firewall) UnSetFirewall(rulename string) error {
 		if err != nil {
 			return fmt.Errorf("error while setting firewall rule.Error:%v", err.Error())
 		}
+
 	case "linux":
-		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+		if !manager.HasCommand("iptables") {
+			return fmt.Errorf("iptables command not found for operating system: %s", runtime.GOOS)
+		}
+		cmd := exec.Command("iptables", "-F", rulename)
+		err := cmd.Run()
+		if err != nil {
+			return fmt.Errorf("error while deleting firewall rule.Error-1:%v", err.Error())
+		}
+		log.Println("deleting rules associated with the rule name:", rulename)
+		cmd = exec.Command("iptables", "-X", rulename)
+		err = cmd.Run()
+		if err != nil {
+			return fmt.Errorf("error while deleting firewall rule.Error-2:%v", err.Error())
+		}
+
+		log.Println("Firewall rule delated that is associated with the name:", rulename)
+
 	case "darwin":
 		if ok, err := firewallAnchorExistsDarwin(rulename); !ok || err != nil {
 			return fmt.Errorf("firewall rule does not exist or some err.rule:%v,%v", rulename, err)
@@ -192,7 +271,14 @@ func (f *Firewall) GetFirewall(rulename string) (firewall map[string]string, err
 		}
 		return f.ToMap(string(output))
 	case "linux":
-		return nil, fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+
+		cmd := exec.Command("sudo", "iptables", "-L", rulename, "-n", "-v")
+		output, err := cmd.Output()
+		if err != nil {
+			log.Println("Error:", err)
+			return nil, err
+		}
+
 	case "darwin":
 		var cmd *exec.Cmd
 		cmd = exec.Command("pfctl", "-a", rulename, "-s", "rules")
@@ -260,7 +346,11 @@ func (f *Firewall) ToMap(output string) (map[string]string, error) {
 		return outputMap, fmt.Errorf("no data found")
 
 	case "linux":
-		return nil, fmt.Errorf("not implemented")
+		ruleMap := parseFirewallRulesForLinux(output)
+		if ruleMap == nil {
+			return nil, fmt.Errorf("not implemented")
+		}
+		return ruleMap, nil
 
 	case "darwin":
 		strs := strings.Split(output, " ")
@@ -303,7 +393,8 @@ func validateFirewallInput(rulename, direction, action, protocol, remoteip, port
 	if !(strings.ToLower(direction) == "in" || strings.ToLower(direction) == "out") {
 		return fmt.Errorf("invalid direction.Direction must be in|out")
 	}
-	if !(strings.ToLower(action) == "allow" || strings.ToLower(direction) == "block") {
+
+	if !(strings.ToLower(action) == "allow" || strings.ToLower(action) == "block") {
 		return fmt.Errorf("invalid action.Action must be allow|block")
 	}
 	hasFound := false
@@ -386,4 +477,82 @@ func firewallAnchorExistsDarwin(anchorName string) (bool, error) {
 
 	// Anchor does not exist
 	return false, nil
+}
+
+func firewallAnchorExistsLinux(chainName string) bool {
+	if !manager.HasCommand("iptables-save") {
+		log.Println("iptables-save tool not available")
+		return false
+	}
+
+	// Fetch all iptables chains
+	cmd := exec.Command("iptables-save")
+	output, err := cmd.Output()
+	if err != nil {
+		log.Println("Error:", err)
+		return false
+	}
+
+	// Split the output into lines
+	lines := strings.Split(string(output), "\n")
+
+	// Iterate over each line to find the chain
+	for _, line := range lines {
+		if strings.HasPrefix(line, ":"+chainName+" ") {
+			return true
+		}
+	}
+	return false
+}
+
+func parseFirewallRulesForLinux(output string) map[string]string {
+	var ruleMap map[string]string
+	lines := strings.Split(output, "\n")
+	fmt.Println(lines[2])
+	if len(lines) >= 3 {
+		ruleMap = make(map[string]string)
+		line := lines[2]
+		fields := strings.Fields(line)
+		if len(fields) > 7 && fields[0] != "Chain" {
+			protocol := fields[3]
+			port := ""
+			remoteIP := ""
+			action := ""
+			if fields[2] == "DROP" {
+				action = "block"
+			} else if fields[2] == "ACCEPT" {
+				action = "allow"
+			}
+			direction := ""
+			if strings.Contains(line, "in") {
+				direction = "in"
+			} else if strings.Contains(line, "out") {
+				direction = "out"
+			}
+			if strings.Contains(line, "dpt:") {
+				remoteIP = fields[8]
+
+			} else if strings.Contains(line, "spt:") {
+				//remoteIP = fields[7]
+			}
+
+			for i := 2; i < len(fields); i++ {
+				if strings.HasPrefix(fields[i], "dpt:") {
+					port = strings.Split(fields[i], ":")[1]
+				} else if strings.Contains(fields[i], "/") {
+					//remoteIP = fields[i]
+				} else if fields[i] == "dpt:" {
+					// Handling cases where port is in separate field
+					port = strings.Split(fields[i+1], ":")[1]
+					i++ // Move to next field
+				}
+			}
+			ruleMap["protocol"] = protocol
+			ruleMap["port"] = port
+			ruleMap["remoteIP"] = remoteIP
+			ruleMap["action"] = action
+			ruleMap["direction"] = direction
+		}
+	}
+	return ruleMap
 }
