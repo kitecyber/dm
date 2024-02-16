@@ -5,11 +5,9 @@ import (
 	"log"
 	"os"
 	"io/fs"
-//	"syscall"
 
 	"github.com/kardianos/osext"
 	"github.com/spf13/cobra"
-//	"golang.org/x/sys/unix"
 )
 
 func init() {
