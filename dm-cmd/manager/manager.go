@@ -11,5 +11,6 @@ type IFirewallManager interface {
 	SetFirewall(rulename, direction, action, protocol, remoteip, port string) error
 	UnSetFirewall(rulename string) error
 	ShowFirewall(rulename string) (string, error)
+	GetFirewall(rulename string) (map[string]string, error)
 	PostSetup() error
 }

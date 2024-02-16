@@ -3,6 +3,7 @@ package cmd
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -18,6 +19,7 @@ var (
 	protocol  string
 	remoteip  string
 	port      string
+	formatted bool
 )
 
 func init() {
@@ -28,6 +30,7 @@ func init() {
 	firewallCmd.Flags().StringVarP(&remoteip, "remoteip", "i", "any", "remoteip is a valid ipv4 ip address or valid cidr notation.Default is [any] which means all ip addresses")
 	firewallCmd.Flags().StringVarP(&port, "port", "r", "any", "port is a value between 0-65535.Default is [any] which means all ports")
 	showFirewallCmd.Flags().StringVarP(&ruleName, "rulename", "n", "all", "a firewall rule name to be given.Default is all")
+	showFirewallCmd.Flags().BoolVarP(&formatted, "formatted", "f", false, "if true it give data in json string format")
 	unSetFirewallCmd.Flags().StringVarP(&ruleName, "rulename", "n", "", "a firewall rule name to be given")
 
 	rootCmd.AddCommand(firewallCmd)
@@ -43,11 +46,25 @@ var showFirewallCmd = &cobra.Command{
 		var ifw manager.IFirewallManager
 		fw := new(firewall.Firewall)
 		ifw = fw
-		output, err := ifw.ShowFirewall(ruleName)
-		if err != nil {
-			log.Fatalln(err)
+		if !formatted {
+			output, err := ifw.ShowFirewall(ruleName)
+			if err != nil {
+				log.Fatalln(err)
+			}
+			fmt.Println(output)
+			return
+		} else {
+			output, err := ifw.GetFirewall(ruleName)
+			if err != nil {
+				log.Fatalln("Error:", err)
+			}
+			jsonData, err := json.Marshal(output)
+			if err != nil {
+				log.Fatalln("Error:", err)
+			}
+			// Print JSON data
+			fmt.Println(string(jsonData))
 		}
-		fmt.Println(output)
 	},
 }
 

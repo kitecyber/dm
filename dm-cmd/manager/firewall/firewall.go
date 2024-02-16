@@ -235,7 +235,13 @@ func (f *Firewall) ShowFirewall(rulename string) (string, error) {
 		}
 		return string(output), nil
 	case "linux":
-		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+		cmd := exec.Command("sudo", "iptables", "-L", rulename, "-n", "-v")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Println("Error:", err)
+			return "", err
+		}
+		return string(output), nil
 	case "darwin":
 		var cmd *exec.Cmd
 		if rulename == "all" || rulename == "any" {
@@ -278,6 +284,7 @@ func (f *Firewall) GetFirewall(rulename string) (firewall map[string]string, err
 			log.Println("Error:", err)
 			return nil, err
 		}
+		return f.ToMap(string(output))
 
 	case "darwin":
 		var cmd *exec.Cmd
@@ -349,6 +356,74 @@ func (f *Firewall) ToMap(output string) (map[string]string, error) {
 		ruleMap := parseFirewallRulesForLinux(output)
 		if ruleMap == nil {
 			return nil, fmt.Errorf("not implemented")
+		}
+		return ruleMap, nil
+
+	case "darwin":
+		strs := strings.Split(output, " ")
+		for i, str := range strs {
+			switch str {
+			case "pass", "block":
+				outputMap["action"] = str
+			case "in", "out":
+				outputMap["direction"] = str
+			case "proto":
+				if len(strs) >= i+1 {
+					outputMap["protocol"] = strs[i+1]
+				}
+			case "port":
+				if len(strs) >= i+1 {
+					outputMap["port"] = strs[i+1]
+				}
+			case "to":
+				if len(strs) >= i+1 {
+					outputMap["remoteIP"] = strs[i+1]
+				}
+			}
+			if len(outputMap) > 0 {
+				return outputMap, nil
+			}
+			//return outputMap, fmt.Errorf("no data found")
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+	return nil, nil
+}
+
+func firewallToMap(output string) (map[string]string, error) {
+	outputMap := make(map[string]string, 0)
+	switch runtime.GOOS {
+	case "windows":
+		lines := strings.Split(output, "\n")
+		for _, line := range lines {
+			//fmt.Println("---->", line)
+			lineSep := strings.Split(line, ":")
+			if len(lineSep) == 2 {
+				switch lineSep[0] {
+				case "Direction":
+					outputMap["direction"] = strings.TrimSpace(strings.ToLower(lineSep[1]))
+				case "Action":
+					outputMap["action"] = strings.TrimSpace(strings.ToLower(lineSep[1]))
+				case "Protocol":
+					outputMap["protocol"] = strings.TrimSpace(strings.ToLower(lineSep[1]))
+				case "RemoteIP":
+					outputMap["remoteIP"] = strings.TrimSpace(strings.ToLower(lineSep[1]))
+				case "RemotePort":
+					outputMap["port"] = strings.TrimSpace(strings.ToLower(lineSep[1]))
+				}
+			}
+		}
+		if len(outputMap) > 0 {
+			return outputMap, nil
+		}
+		return outputMap, fmt.Errorf("no data found")
+
+	case "linux":
+		ruleMap := parseFirewallRulesForLinux(output)
+		if ruleMap == nil {
+			return nil, fmt.Errorf("no data found")
 		}
 		return ruleMap, nil
 
@@ -508,7 +583,7 @@ func firewallAnchorExistsLinux(chainName string) bool {
 func parseFirewallRulesForLinux(output string) map[string]string {
 	var ruleMap map[string]string
 	lines := strings.Split(output, "\n")
-	fmt.Println(lines[2])
+	//fmt.Println(lines[2])
 	if len(lines) >= 3 {
 		ruleMap = make(map[string]string)
 		line := lines[2]

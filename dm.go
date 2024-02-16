@@ -195,7 +195,11 @@ func firewallToMap(output string) (map[string]string, error) {
 		return outputMap, fmt.Errorf("no data found")
 
 	case "linux":
-		return nil, fmt.Errorf("not implemented")
+		ruleMap := parseFirewallRulesForLinux(output)
+		if ruleMap == nil {
+			return nil, fmt.Errorf("no data found")
+		}
+		return ruleMap, nil
 
 	case "darwin":
 		strs := strings.Split(output, " ")
@@ -229,4 +233,56 @@ func firewallToMap(output string) (map[string]string, error) {
 		return nil, fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
 	return nil, nil
+}
+
+func parseFirewallRulesForLinux(output string) map[string]string {
+	var ruleMap map[string]string
+	lines := strings.Split(output, "\n")
+	fmt.Println(lines[2])
+	if len(lines) >= 3 {
+		ruleMap = make(map[string]string)
+		line := lines[2]
+		fields := strings.Fields(line)
+		if len(fields) > 7 && fields[0] != "Chain" {
+			protocol := fields[3]
+			port := ""
+			remoteIP := ""
+			action := ""
+			if fields[2] == "DROP" {
+				action = "block"
+			} else if fields[2] == "ACCEPT" {
+				action = "allow"
+			}
+			direction := ""
+			if strings.Contains(line, "in") {
+				direction = "in"
+			} else if strings.Contains(line, "out") {
+				direction = "out"
+			}
+			if strings.Contains(line, "dpt:") {
+				remoteIP = fields[8]
+
+			} else if strings.Contains(line, "spt:") {
+				//remoteIP = fields[7]
+			}
+
+			for i := 2; i < len(fields); i++ {
+				if strings.HasPrefix(fields[i], "dpt:") {
+					port = strings.Split(fields[i], ":")[1]
+				} else if strings.Contains(fields[i], "/") {
+					//remoteIP = fields[i]
+				} else if fields[i] == "dpt:" {
+					// Handling cases where port is in separate field
+					port = strings.Split(fields[i+1], ":")[1]
+					i++ // Move to next field
+				}
+			}
+			ruleMap["protocol"] = protocol
+			ruleMap["port"] = port
+			ruleMap["remoteIP"] = remoteIP
+			ruleMap["action"] = action
+			ruleMap["direction"] = direction
+		}
+	}
+	return ruleMap
 }
