@@ -1,6 +1,8 @@
 package manager
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"log"
 	"net"
@@ -71,4 +73,12 @@ func init() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+}
+
+func GetSHA(input string) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(input))
+	hashedBytes := hasher.Sum(nil)
+	hashedString := hex.EncodeToString(hashedBytes)
+	return hashedString
 }

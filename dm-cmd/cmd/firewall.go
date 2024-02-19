@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -32,10 +30,12 @@ func init() {
 	showFirewallCmd.Flags().StringVarP(&ruleName, "rulename", "n", "all", "a firewall rule name to be given.Default is all")
 	showFirewallCmd.Flags().BoolVarP(&formatted, "formatted", "f", false, "if true it give data in json string format")
 	unSetFirewallCmd.Flags().StringVarP(&ruleName, "rulename", "n", "", "a firewall rule name to be given")
+	firewallExistsCmd.Flags().StringVarP(&ruleName, "rulename", "n", "", "a firewall rule name to be given")
 
 	rootCmd.AddCommand(firewallCmd)
 	firewallCmd.AddCommand(showFirewallCmd)
 	firewallCmd.AddCommand(unSetFirewallCmd)
+	firewallCmd.AddCommand(firewallExistsCmd)
 }
 
 var showFirewallCmd = &cobra.Command{
@@ -98,7 +98,6 @@ var firewallCmd = &cobra.Command{
 		if ruleName == "" {
 			//ruleName = getSHA(direction + action + protocol + remoteip + port)
 			log.Fatalln("invalid rule name.It is mandatory")
-
 		}
 		err := ifw.SetFirewall(ruleName, direction, action, protocol, remoteip, port)
 		if err != nil {
@@ -108,10 +107,22 @@ var firewallCmd = &cobra.Command{
 	},
 }
 
-func getSHA(input string) string {
-	hasher := sha256.New()
-	hasher.Write([]byte(input))
-	hashedBytes := hasher.Sum(nil)
-	hashedString := hex.EncodeToString(hashedBytes)
-	return hashedString
+var firewallExistsCmd = &cobra.Command{
+	Use:   "exists",
+	Short: "exists tells whether firewall is there or not",
+	Long:  "exists tells whether firewall is there or not.Yes|No is the result",
+	Run: func(cmd *cobra.Command, args []string) {
+		var ifw manager.IFirewallManager
+		fw := new(firewall.Firewall)
+		ifw = fw
+		if ruleName == "" {
+			log.Fatalln("invalid rule name.It is mandatory")
+		}
+		result := ifw.IsFirewallExists(ruleName)
+		if result {
+			fmt.Println("Yes")
+		} else {
+			fmt.Println("No")
+		}
+	},
 }

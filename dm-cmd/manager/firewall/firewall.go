@@ -631,3 +631,24 @@ func parseFirewallRulesForLinux(output string) map[string]string {
 	}
 	return ruleMap
 }
+
+func (f *Firewall) IsFirewallExists(ruleName string) bool {
+	switch runtime.GOOS {
+	case "windows":
+		b, err := firewallRuleExistsWindows(ruleName)
+		if err != nil {
+			log.Println("Error in reading firewall:", err)
+		}
+		return b
+	case "linux":
+		return firewallAnchorExistsLinux(ruleName)
+	case "darwin":
+		b, err := firewallAnchorExistsDarwin(ruleName)
+		if err != nil {
+			log.Println("Error in reading firewall:", err)
+		}
+		return b
+	default:
+		return false
+	}
+}

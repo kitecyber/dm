@@ -196,6 +196,24 @@ func GetFirewall(name string) (action, direction, protocol, remoteIP, port strin
 	return m["action"], m["direction"], m["protocol"], m["remoteIP"], m["port"], nil
 }
 
+func IsFirewallExists(name string) (bool, error) {
+	if be == nil {
+		return false, fmt.Errorf("call EnsureHelperToolPresent() first")
+	}
+	cmd := be.Command("firewall", "exists", "-n", name)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return false, err
+	}
+	if string(out) == "Yes" {
+		return true, nil
+	} else if string(out) == "No" {
+		return false, nil
+	} else {
+		return false, nil
+	}
+}
+
 func GetFirewallToJson(name string) (string, error) {
 	if be == nil {
 		return "", fmt.Errorf("call EnsureHelperToolPresent() first")

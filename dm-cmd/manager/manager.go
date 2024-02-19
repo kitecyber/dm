@@ -12,5 +12,6 @@ type IFirewallManager interface {
 	UnSetFirewall(rulename string) error
 	ShowFirewall(rulename string) (string, error)
 	GetFirewall(rulename string) (map[string]string, error)
+	IsFirewallExists(rulename string) bool
 	PostSetup() error
 }
