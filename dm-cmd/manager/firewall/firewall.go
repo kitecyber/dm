@@ -1,8 +1,10 @@
 package firewall
 
 import (
+	"bufio"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -139,8 +141,9 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 		line = line + fmt.Sprintln("\t", action, direction, "proto", protocol, "from", "any", "to", remoteip, "port", port)
 		line = line + "}"
 
-		cmd := exec.Command("sh", "-c", fmt.Sprintf("echo '%s' >> /etc/pf.conf", line))
-		err := cmd.Run()
+		// cmd := exec.Command("sh", "-c", "echo", fmt.Sprintf("'%s'>>/etc/pf.conf", line))
+		// err := cmd.Run()
+		err := WriteFirewallRuleByAnchorDarwin(line)
 		if err != nil {
 			return fmt.Errorf("error while setting firewall rule.Error:%v", err.Error())
 		}
@@ -205,8 +208,7 @@ func (f *Firewall) UnSetFirewall(rulename string) error {
 		}
 		// sudo pfctl -a my_anchor -F rules
 		// this deletes a rule based on the anchor. this application must ensure each rule has a saperate anchor
-		cmd := exec.Command("pfctl", "-a", rulename, "-F", "rules")
-		err := cmd.Run()
+		err := RemoveFirewallRuleByAnchorDarwin(rulename)
 		if err != nil {
 			return fmt.Errorf("error while deleting firewall rule.Error:%v", err.Error())
 		}
@@ -243,21 +245,36 @@ func (f *Firewall) ShowFirewall(rulename string) (string, error) {
 		}
 		return string(output), nil
 	case "darwin":
-		var cmd *exec.Cmd
 		if rulename == "all" || rulename == "any" {
-			cmd = exec.Command("pfctl", "-sr")
+			//cmd = exec.Command("pfctl", "-a", rulename, "-s", "rules")
+			rules, err := GetFirewAllRulesDarwin()
+			if err != nil {
+				return "", fmt.Errorf("error fetching firewall rules:%v", err.Error())
+			}
+			output := ""
+			for _, rule := range rules {
+				output += rule + "\n"
+			}
+			return output, nil
 		} else {
-			cmd = exec.Command("pfctl", "-a", rulename, "-s", "rules")
+			rules, err := GetFirewallByAnchorDarwin(rulename)
+			if err != nil {
+				return "", fmt.Errorf("error fetching firewall rules:%v", err.Error())
+			}
+			// output := ""
+			// for _, rule := range rules {
+			// 	output += rule + "\n"
+			// }
+			// return output, nil
+			if len(rules) > 0 {
+				return rules[0], nil
+			}
 		}
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			return "", fmt.Errorf("error fetching firewall rules:%v", err.Error())
-		}
-		return string(output), nil
 
 	default:
 		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
+	return "", nil
 }
 
 func (f *Firewall) GetFirewall(rulename string) (firewall map[string]string, err error) {
@@ -277,7 +294,6 @@ func (f *Firewall) GetFirewall(rulename string) (firewall map[string]string, err
 		}
 		return f.ToMap(string(output))
 	case "linux":
-
 		cmd := exec.Command("sudo", "iptables", "-L", rulename, "-n", "-v")
 		output, err := cmd.Output()
 		if err != nil {
@@ -287,17 +303,18 @@ func (f *Firewall) GetFirewall(rulename string) (firewall map[string]string, err
 		return f.ToMap(string(output))
 
 	case "darwin":
-		var cmd *exec.Cmd
-		cmd = exec.Command("pfctl", "-a", rulename, "-s", "rules")
-		output, err := cmd.CombinedOutput()
+		rules, err := GetFirewallByAnchorDarwin(rulename)
 		if err != nil {
 			return nil, fmt.Errorf("error fetching firewall rules:%v", err.Error())
 		}
-		return f.ToMap(string(output))
+		if len(rules) > 0 {
+			return f.ToMap(rules[0]) //techinically there can be any number of rules per an anchor. But this tool must restrict while setFirewall
+		}
 
 	default:
 		return nil, fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
+	return nil, nil
 }
 
 // any commands to run after setup.Like restart the servers etc..
@@ -527,31 +544,13 @@ func firewallRuleExistsWindows(ruleName string) (bool, error) {
 }
 
 func firewallAnchorExistsDarwin(anchorName string) (bool, error) {
-
-	if !manager.HasCommand("pfctl") {
-		return false, fmt.Errorf("pfctl tool not available")
+	if rules, err := GetFirewallByAnchorDarwin(anchorName); err != nil {
+		return false, err
+	} else if len(rules) > 0 {
+		return true, nil
+	} else {
+		return false, nil
 	}
-	// Run pfctl command to list anchors
-	cmd := exec.Command("pfctl", "-s", "Anchors")
-
-	// Run the command and capture output
-	output, err := cmd.Output()
-	if err != nil {
-		return false, fmt.Errorf("error running pfctl: %v", err)
-	}
-
-	// Convert output bytes to string and split into lines
-	outputLines := strings.Split(string(output), "\n")
-
-	// Check if the anchor exists in the list of anchors
-	for _, line := range outputLines {
-		if line == anchorName {
-			return true, nil
-		}
-	}
-
-	// Anchor does not exist
-	return false, nil
 }
 
 func firewallAnchorExistsLinux(chainName string) bool {
@@ -651,4 +650,139 @@ func (f *Firewall) IsFirewallExists(ruleName string) bool {
 	default:
 		return false
 	}
+}
+
+func GetFirewallByAnchorDarwin(anchorName string) ([]string, error) {
+	var rules []string
+	file, err := os.Open("/etc/pf.conf")
+	if err != nil {
+		log.Println("Error opening file:", err)
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	// Flag to indicate if the desired anchor is found
+	foundAnchor := false
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		ln := strings.ReplaceAll(line, " ", "")
+		if strings.Contains(ln, "anchor"+anchorName+"{") {
+			//println(line)
+			//println(ln)
+			foundAnchor = true
+		} else {
+			if foundAnchor && ln != "}" {
+				rules = append(rules, strings.TrimSpace(line))
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Println("Error reading file:", err)
+		return nil, err
+	}
+
+	return rules, nil
+}
+
+func GetFirewAllRulesDarwin() ([]string, error) {
+	var rules []string
+	file, err := os.Open("/etc/pf.conf")
+	if err != nil {
+		log.Println("Error opening file:", err)
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	// Flag to indicate if the desired anchor is found
+	foundAnchor := false
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		ln := strings.ReplaceAll(line, " ", "")
+		if strings.Contains(ln, "anchor") && strings.Contains(ln, "{") {
+			//println(line)
+			//println(ln)
+			foundAnchor = true
+		} else {
+			if foundAnchor && ln != "}" {
+				rules = append(rules, strings.TrimSpace(line))
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Println("Error reading file:", err)
+		return nil, err
+	}
+
+	return rules, nil
+}
+
+func RemoveFirewallRuleByAnchorDarwin(anchorName string) error {
+	file, err := os.Open("/etc/pf.conf")
+	if err != nil {
+		log.Println("Error opening file:", err)
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	// Flag to indicate if the desired anchor is found
+	foundAnchor := false
+	newContent := ""
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		ln := strings.ReplaceAll(line, " ", "")
+		if strings.Contains(ln, "anchor"+anchorName+"{") {
+			foundAnchor = true
+			continue
+		} else {
+			if foundAnchor && ln == "}" {
+				foundAnchor = false
+				continue
+			}
+		}
+		if !foundAnchor {
+			newContent = newContent + line + "\n"
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Println("Error reading file:", err)
+		return err
+	}
+
+	// Write the modified content back to the file (caution advised)
+	err = os.WriteFile("/etc/pf.conf", []byte(newContent), 0644)
+	if err != nil {
+		log.Println("Error writing file:", err)
+		return err
+	}
+
+	log.Println("Anchor", anchorName, "removed successfully.")
+
+	return nil
+}
+
+func WriteFirewallRuleByAnchorDarwin(rule string) error {
+	// Open the file for appending and writing
+	f, err := os.OpenFile("/etc/pf.conf", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		log.Println("Error opening file:", err)
+		return err
+	}
+	defer f.Close()
+
+	// Flag to indicate if the desired anchor is found
+	_, err = f.Write([]byte(rule))
+	if err != nil {
+		log.Println("Error writing to file:", err)
+		return err
+	}
+	return nil
 }
