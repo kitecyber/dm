@@ -97,7 +97,8 @@ func GetDNS() (primaryDNS string, secondaryDNS string, err error) {
 		return "", "", err
 	}
 	strs := strings.Split(string(out), "\n")
-	if len(strs) == 2 {
+	fmt.Println(strs)
+	if len(strs) >= 2 {
 		primary := strings.Split(strs[0], ":")
 		secondary := strings.Split(strs[1], ":")
 		if len(primary) == 2 {
