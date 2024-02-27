@@ -1,6 +1,3 @@
-//go:build linux || darwin
-// +build linux darwin
-
 package firewall
 
 import (
@@ -11,7 +8,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-	"syscall"
 
 	"github.com/kitecyber/dm/dm-cmd/manager"
 )
@@ -54,8 +50,6 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 			cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+rulename, "dir="+direction, "action="+action, "protocol="+protocol, "remoteip="+remoteip)
 		}
 
-		cmdFirewall.SysProcAttr = &syscall.SysProcAttr{}
-		cmdFirewall.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 		err := cmdFirewall.Run()
 		if err != nil {
 			return fmt.Errorf("error while setting firewall rule.Error:%v", err.Error())
@@ -66,8 +60,6 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 		}
 
 		createChainCmd := exec.Command("iptables", "-N", rulename)
-		createChainCmd.SysProcAttr = &syscall.SysProcAttr{}
-		createChainCmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 		if err := createChainCmd.Run(); err != nil {
 			log.Println("Rule name already exists.Error creating rule name:", err)
 			return err
@@ -121,8 +113,7 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 		var cmd *exec.Cmd
 
 		cmd = exec.Command("iptables", args...)
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
+
 		log.Println("Firewall Rule Command:", cmd.String())
 		_, err := cmd.CombinedOutput()
 		if err != nil {
@@ -200,8 +191,6 @@ func (f *Firewall) UnSetFirewall(rulename string) error {
 		}
 		log.Println("deleting rules associated with the rule name:", rulename)
 		cmd = exec.Command("iptables", "-X", rulename)
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 		err = cmd.Run()
 		if err != nil {
 			return fmt.Errorf("error while deleting firewall rule.Error-2:%v", err.Error())
@@ -340,8 +329,6 @@ func (f *Firewall) PostSetup() error {
 			return fmt.Errorf("pfctl command not found for operating system: %s", runtime.GOOS)
 		}
 		cmd := exec.Command("pfctl", "-f", "/etc/pf.conf")
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 		err := cmd.Run()
 		if err != nil {
 			return err

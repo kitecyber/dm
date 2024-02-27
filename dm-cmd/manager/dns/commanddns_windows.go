@@ -1,6 +1,3 @@
-//go:build linux || darwin
-// +build linux darwin
-
 package dns
 
 import (
@@ -10,7 +7,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-	"syscall"
 
 	"github.com/kitecyber/dm/dm-cmd/manager"
 )
@@ -66,8 +62,6 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 				}
 				cmd = exec.Command("nmcli", "connection", "modify", connName, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
 
-				cmd.SysProcAttr = &syscall.SysProcAttr{}
-				cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 				err = cmd.Run()
 				if err != nil {
 					log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", activeIface, err.Error())
@@ -88,8 +82,7 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 			hasOneSet := false
 			for _, activeIface := range manager.ActiveInterfaces {
 				cmd := exec.Command("networksetup", "-setdnsservers", activeIface, primaryDNS, secondaryDNS)
-				cmd.SysProcAttr = &syscall.SysProcAttr{}
-				cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
+
 				err := cmd.Run()
 				if err != nil {
 					log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", activeIface, err.Error())
@@ -114,14 +107,11 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 			cmdPrimary := exec.Command("netsh", "interface", "ipv4", "set", "dns", "name="+iface, "source=static", "addr="+primaryDNS)
 			cmdSecondary := exec.Command("netsh", "interface", "ipv4", "add", "dns", "name="+iface, "addr="+secondaryDNS, "index=2")
 
-			cmdPrimary.SysProcAttr = &syscall.SysProcAttr{}
-			cmdPrimary.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 			err1 := cmdPrimary.Run()
 			if err1 != nil {
 				return fmt.Errorf("Error setting Primary DNS for the interface:%v.Error:%v", iface, err1.Error())
 			}
-			cmdSecondary.SysProcAttr = &syscall.SysProcAttr{}
-			cmdSecondary.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
+
 			err2 := cmdSecondary.Run()
 			if err2 != nil {
 				return fmt.Errorf("Error setting Secondary DNS for the interface:%v.Error:%v", iface, err2.Error())
@@ -135,8 +125,7 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 				return err
 			}
 			cmd = exec.Command("nmcli", "connection", "modify", connName, "ipv4.dns", strings.Join([]string{primaryDNS, secondaryDNS}, ","))
-			cmd.SysProcAttr = &syscall.SysProcAttr{}
-			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
+
 			err = cmd.Run()
 			if err != nil {
 				return err
@@ -147,8 +136,7 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 				return fmt.Errorf("networksetup command not found, consider installing it")
 			}
 			cmd := exec.Command("networksetup", "-setdnsservers", iface, primaryDNS, secondaryDNS)
-			cmd.SysProcAttr = &syscall.SysProcAttr{}
-			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
+
 			err := cmd.Run()
 			if err != nil {
 				return err
@@ -200,8 +188,6 @@ func (cd *CommandDNS) UnSetDNS(iface string) error {
 					return err
 				}
 				cmd = exec.Command("nmcli", "connection", "modify", connName, "ipv4.dns")
-				cmd.SysProcAttr = &syscall.SysProcAttr{}
-				cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 				err = cmd.Run()
 				if err != nil {
 					log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", activeIface, err.Error())
@@ -222,15 +208,11 @@ func (cd *CommandDNS) UnSetDNS(iface string) error {
 				removeSecondaryDNSCmd := exec.Command("networksetup", "-setdnsservers", activeIface, "empty")
 
 				// Run commands
-				removePrimaryDNSCmd.SysProcAttr = &syscall.SysProcAttr{}
-				removePrimaryDNSCmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 				if err := removePrimaryDNSCmd.Run(); err != nil {
 					log.Printf("Error un-setting Secondary DNS for the interface:%v.Error:%v", activeIface, err.Error())
 					return err
 				}
 
-				removeSecondaryDNSCmd.SysProcAttr = &syscall.SysProcAttr{}
-				removeSecondaryDNSCmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 				if err := removeSecondaryDNSCmd.Run(); err != nil {
 					log.Printf("Error un-setting Secondary DNS for the interface:%v.Error:%v", activeIface, err.Error())
 					return err
@@ -262,8 +244,7 @@ func (cd *CommandDNS) UnSetDNS(iface string) error {
 				return err
 			}
 			cmd = exec.Command("nmcli", "connection", "modify", connName, "ipv4.dns")
-			cmd.SysProcAttr = &syscall.SysProcAttr{}
-			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
+
 			err = cmd.Run()
 			if err != nil {
 				log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", iface, err.Error())
@@ -281,15 +262,11 @@ func (cd *CommandDNS) UnSetDNS(iface string) error {
 			removeSecondaryDNSCmd := exec.Command("networksetup", "-setdnsservers", iface, "empty")
 
 			// Run commands
-			removePrimaryDNSCmd.SysProcAttr = &syscall.SysProcAttr{}
-			removePrimaryDNSCmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 			if err := removePrimaryDNSCmd.Run(); err != nil {
 				log.Printf("Error un-setting Secondary DNS for the interface:%v.Error:%v", iface, err.Error())
 				return err
 			}
 
-			removeSecondaryDNSCmd.SysProcAttr = &syscall.SysProcAttr{}
-			removeSecondaryDNSCmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 			if err := removeSecondaryDNSCmd.Run(); err != nil {
 				log.Printf("Error un-setting Secondary DNS for the interface:%v.Error:%v", iface, err.Error())
 				return err

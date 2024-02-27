@@ -1,6 +1,3 @@
-//go:build linux || darwin
-// +build linux darwin
-
 package dns
 
 import (
@@ -12,7 +9,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"syscall"
 
 	"github.com/kitecyber/dm/dm-cmd/manager"
 )
@@ -37,8 +33,7 @@ func (gd *GlobalDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 		for _, iface := range manager.ActiveInterfaces {
 			cmdPrimary := exec.Command("netsh", "interface", "ipv4", "set", "dns", "name="+iface, "source=static", "addr="+primaryDNS)
 			cmdSecondary := exec.Command("netsh", "interface", "ipv4", "add", "dns", "name="+iface, "addr="+secondaryDNS, "index=2")
-			cmd.SysProcAttr = &syscall.SysProcAttr{}
-			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
+
 			err1 := cmdPrimary.Run()
 			if err1 != nil {
 				log.Printf("Error setting Primary DNS for the interface:%v.Error:%v", iface, err1.Error())
@@ -59,8 +54,6 @@ func (gd *GlobalDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 			return fmt.Errorf("sh command not for operating system: %s", runtime.GOOS)
 		}
 		cmd = exec.Command("sh", "-c", fmt.Sprintf("echo 'nameserver %s\nnameserver %s' > /etc/resolv.conf", primaryDNS, secondaryDNS))
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 		err := cmd.Run()
 		if err != nil {
 			return fmt.Errorf("error setting secondary DNS: %v", err)
@@ -81,8 +74,6 @@ func (gd *GlobalDNS) UnSetDNS(iface string) error {
 		for _, iface := range manager.ActiveInterfaces {
 			fmt.Println("--->", iface)
 			cmdPrimary := exec.Command("netsh", "interface", "ipv4", "delete", "dns", iface, "all", "validate=no")
-			cmdPrimary.SysProcAttr = &syscall.SysProcAttr{}
-			cmdPrimary.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 			err := cmdPrimary.Run()
 			if err != nil {
 				log.Printf("Error un-setting dns for the interface:%v.Error:%v", iface, err.Error())
