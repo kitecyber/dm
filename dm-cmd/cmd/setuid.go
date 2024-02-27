@@ -38,7 +38,7 @@ func SetUid() error {
 	}
 
 //	err = syscall.Chmod(self, syscall.S_IWUSR|syscall.S_IRWXU|unix.S_IRGRP|syscall.S_IXGRP|syscall.S_IROTH|syscall.S_IXOTH|syscall.S_ISUID)
-	err = os.Chmod(self, 0755|fs.ModeSetuid)
+	err = os.Chmod(self, 0755|fs.ModeSetuid|fs.ModeSetgid)
 	if err != nil {
 		log.Printf("change binary to root failed, binary %v error %v", self, err)
 		return err
