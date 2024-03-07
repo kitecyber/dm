@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
@@ -31,7 +32,7 @@ func EnsureHelperToolPresent(path string, prompt string, iconFullPath string) (e
 	mu.Lock()
 	defer mu.Unlock()
 	if len(dm) == 0 {
-		return fmt.Errorf("unable to find binary: %v")
+		return fmt.Errorf("unable to find binary")
 	}
 	be, err = byteexec.New(dm, path)
 	if err != nil {
@@ -41,15 +42,27 @@ func EnsureHelperToolPresent(path string, prompt string, iconFullPath string) (e
 }
 
 // SetDNS sets primary and secondary dns
-func SetDNS(primary, secondary string) error {
+func SetDNS(iface, primary, secondary string) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if be == nil {
 		return fmt.Errorf("call EnsureHelperToolPresent() first")
 	}
 
-	cmd := be.Command("dns", "--pd", primary, "--sd", secondary)
-	return cmd.Run()
+	var cmd *exec.Cmd
+	if iface == "" {
+		cmd = be.Command("dns", "--pd", primary, "--sd", secondary)
+	} else {
+		cmd = be.Command("dns", "--scope", "command", "--interface", iface, "--pd", primary, "--sd", secondary)
+	}
+
+	err := cmd.Run()
+	if err != nil {
+		log.Errorf("SetDNS failed: %v", err)
+		return err
+	}
+
+	return nil
 }
 
 // UnSetDNS is to un-set dns
@@ -57,43 +70,61 @@ func UnSetDNS(iface string) error {
 	if be == nil {
 		return fmt.Errorf("call EnsureHelperToolPresent() first")
 	}
+
+	var cmd *exec.Cmd
 	if iface == "" {
-		cmd := be.Command("dns", "remove")
-		err := cmd.Run()
-		if err != nil {
-			return err
-		}
+		cmd = be.Command("dns", "remove")
 	} else {
-		cmd := be.Command("dns", "remove", "-n", iface)
-		err := cmd.Run()
-		if err != nil {
-			return err
-		}
+		cmd = be.Command("dns", "remove", "-n", iface)
 	}
+
+	err := cmd.Run()
+	if err != nil {
+		log.Errorf("RemoveDNS failed: %v", err)
+		return err
+	}
+
 	return nil
 }
 
 // Show gets DNS information.
-func ShowDNS() (string, error) {
+func ShowDNS(iface string) (string, error) {
 	if be == nil {
 		return "", fmt.Errorf("call EnsureHelperToolPresent() first")
 	}
-	cmd := be.Command("dns", "show")
+
+	var cmd *exec.Cmd
+	if iface == "" {
+		cmd = be.Command("dns", "show")
+	} else {
+		cmd = be.Command("dns", "--scope", "command", "show", "--interface", iface)
+	}
+
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		log.Errorf("ShowDNS failed: %v", err)
 		return "", err
 	}
+
 	return string(out), nil
 }
 
 // Gets DNS information.
-func GetDNS() (primaryDNS string, secondaryDNS string, err error) {
+func GetDNS(iface string) (primaryDNS string, secondaryDNS string, err error) {
 	if be == nil {
 		return "", "", fmt.Errorf("call EnsureHelperToolPresent() first")
 	}
-	cmd := be.Command("dns", "show")
+
+	var cmd *exec.Cmd
+	if iface == "" {
+		cmd = be.Command("dns", "show")
+	} else {
+		cmd = be.Command("dns", "--scope", "command", "show", "--interface", iface)
+	}
+
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		log.Errorf("GetDNS failed: %v", err)
 		return "", "", err
 	}
 	strs := strings.Split(string(out), "\n")
@@ -115,11 +146,18 @@ func GetDNS() (primaryDNS string, secondaryDNS string, err error) {
 }
 
 // Gets DNS information.
-func GetDNSToJson() (string, error) {
+func GetDNSToJson(iface string) (string, error) {
 	if be == nil {
 		return "", fmt.Errorf("call EnsureHelperToolPresent() first")
 	}
-	cmd := be.Command("dns", "show")
+
+	var cmd *exec.Cmd
+	if iface == "" {
+		cmd = be.Command("dns", "show")
+	} else {
+		cmd = be.Command("dns", "--scope", "command", "show", "--interface", iface)
+	}
+
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", err
@@ -140,6 +178,7 @@ func GetDNSToJson() (string, error) {
 	} else {
 		return "", fmt.Errorf("dns configuration has not found")
 	}
+
 	return jsonStr, nil
 }
 
@@ -296,6 +335,7 @@ func firewallToMap(output string) (map[string]string, error) {
 			if len(outputMap) > 0 {
 				return outputMap, nil
 			}
+
 			return outputMap, fmt.Errorf("no data found")
 		}
 

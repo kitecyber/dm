@@ -406,7 +406,7 @@ func (cd *CommandDNS) getDNSDarwin() (string, string, error) {
 		// Look for "nameserver" entries
 		if strings.Contains(line, "nameserver[") {
 			// Extract DNS server IP address
-			dnsServer := strings.TrimSpace(strings.Split(line, ":")[1])
+			dnsServer := strings.TrimSpace(strings.SplitN(line, ":", 1)[0])
 
 			// If primaryDNS is empty, assign the first DNS server to it
 			if primaryDNS == "" {
