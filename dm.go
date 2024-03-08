@@ -75,7 +75,7 @@ func UnSetDNS(iface string) error {
 	if iface == "" {
 		cmd = be.Command("dns", "remove")
 	} else {
-		cmd = be.Command("dns", "remove", "-n", iface)
+		cmd = be.Command("dns", "--scope", "command", "--interface", iface, "remove")
 	}
 
 	err := cmd.Run()
