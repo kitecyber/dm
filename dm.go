@@ -110,6 +110,13 @@ func ShowDNS(iface string) (string, error) {
 }
 
 // Gets DNS information.
+const (
+	PRIMARY_PREFIX_SCOPE   = "Primary DNS: nameserver[0] :"
+	SECONDARY_PREFIX_SCOPE = "Seconday DNS: nameserver[1] :"
+	PRIMARY_PREFIX_GLOBE   = "Primary DNS:"
+	SECONDARY_PREFIX_GLOBE = "Seconday DNS:"
+)
+
 func GetDNS(iface string) (primaryDNS string, secondaryDNS string, err error) {
 	if be == nil {
 		return "", "", fmt.Errorf("call EnsureHelperToolPresent() first")
@@ -128,17 +135,18 @@ func GetDNS(iface string) (primaryDNS string, secondaryDNS string, err error) {
 		return "", "", err
 	}
 	strs := strings.Split(string(out), "\n")
-	fmt.Println(strs)
+	var primary, secondary string = "", ""
 	if len(strs) >= 2 {
-		primary := strings.Split(strs[0], ":")
-		secondary := strings.Split(strs[1], ":")
-		if len(primary) == 2 {
-			primaryDNS = strings.TrimSpace(primary[1])
-		}
-		if len(secondary) == 2 {
-			secondaryDNS = strings.TrimSpace(secondary[1])
+		if iface == "" {
+			primary = string(strs[0][len(PRIMARY_PREFIX_GLOBE):])
+			secondary = string(strs[1][len(SECONDARY_PREFIX_GLOBE):])
+		} else {
+			primary = string(strs[0][len(PRIMARY_PREFIX_SCOPE):])
+			secondary = string(strs[1][len(SECONDARY_PREFIX_SCOPE):])
 		}
 
+		primaryDNS = strings.TrimSpace(primary)
+		secondaryDNS = strings.TrimSpace(secondary)
 	} else {
 		return "", "", fmt.Errorf("dns configuration has not found")
 	}
