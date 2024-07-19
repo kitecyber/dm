@@ -138,11 +138,25 @@ func GetDNS(iface string) (primaryDNS string, secondaryDNS string, err error) {
 	var primary, secondary string = "", ""
 	if len(strs) >= 2 {
 		if iface == "" {
-			primary = string(strs[0][len(PRIMARY_PREFIX_GLOBE):])
-			secondary = string(strs[1][len(SECONDARY_PREFIX_GLOBE):])
+			priStr := strs[0]
+			if len(priStr) > len(PRIMARY_PREFIX_GLOBE) {
+				primary = string(priStr[len(PRIMARY_PREFIX_GLOBE):])
+			}
+
+			secStr := strs[1]
+			if len(secStr) > len(SECONDARY_PREFIX_GLOBE) {
+				secondary = string(secStr[len(SECONDARY_PREFIX_GLOBE):])
+			}
 		} else {
-			primary = string(strs[0][len(PRIMARY_PREFIX_SCOPE):])
-			secondary = string(strs[1][len(SECONDARY_PREFIX_SCOPE):])
+			priStr := strs[0]
+			if len(priStr) > len(PRIMARY_PREFIX_SCOPE) {
+				primary = string(priStr[len(PRIMARY_PREFIX_SCOPE):])
+			}
+
+			secStr := strs[1]
+			if len(secStr) > len(SECONDARY_PREFIX_SCOPE) {
+				secondary = string(secStr[len(SECONDARY_PREFIX_SCOPE):])
+			}
 		}
 
 		primaryDNS = strings.TrimSpace(primary)
