@@ -5,6 +5,7 @@ type IDNSDeviceManager interface {
 	GetDNS(string) (string, string, error)
 	UnSetDNS(iface string) error
 	PostSetup() error
+	GetDeviceName() (string, error)
 }
 
 type IFirewallManager interface {
