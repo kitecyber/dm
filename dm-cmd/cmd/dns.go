@@ -26,9 +26,12 @@ func init() {
 	unsetDns.Flags().StringVarP(&scope, "scope", "s", "system", "two types of the scopes. system|command")
 	unsetDns.Flags().StringVarP(&iface, "interface", "i", "system", "provide interfaces based on the system")
 
+	getDeviceName.Flags().StringVarP(&scope, "scope", "s", "system", "two types of the scopes. system|command")
+
 	rootCmd.AddCommand(dnsCmd)
 	dnsCmd.AddCommand(showCmd)
 	dnsCmd.AddCommand(unsetDns)
+	dnsCmd.AddCommand(getDeviceName)
 }
 
 var showCmd = &cobra.Command{
@@ -116,6 +119,37 @@ var unsetDns = &cobra.Command{
 				log.Fatalln(err)
 			} else {
 				println("DNS has been unset successfully")
+			}
+		} else {
+			log.Fatalln("undefined scope.Scope can be system|command")
+		}
+	},
+}
+
+var getDeviceName = &cobra.Command{
+	Use:   "getDeviceName",
+	Short: "Get device name",
+	Long:  "Get device name",
+	Run: func(cmd *cobra.Command, args []string) {
+		var idm manager.IDNSDeviceManager
+		if scope == "system" {
+			idm = new(dns.GlobalDNS)
+			name, err := idm.GetDeviceName()
+			if err != nil {
+				log.Fatalln(err)
+			} else {
+				println("Device name:", name)
+			}
+		} else if scope == "command" {
+			if iface == "" {
+				log.Fatalln("interface cannot be empty")
+			}
+			idm = new(dns.CommandDNS)
+			name, err := idm.GetDeviceName()
+			if err != nil {
+				log.Fatalln(err)
+			} else {
+				println("Device name:", name)
 			}
 		} else {
 			log.Fatalln("undefined scope.Scope can be system|command")

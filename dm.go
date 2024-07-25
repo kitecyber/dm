@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -130,41 +131,20 @@ func GetDNS(iface string) (primaryDNS string, secondaryDNS string, err error) {
 	}
 
 	out, err := cmd.CombinedOutput()
+	fmt.Println("out: ")
+	fmt.Println(string(out))
 	if err != nil {
 		log.Errorf("GetDNS failed: %v", err)
 		return "", "", err
 	}
-	strs := strings.Split(string(out), "\n")
-	var primary, secondary string = "", ""
-	if len(strs) >= 2 {
-		if iface == "" {
-			priStr := strs[0]
-			if len(priStr) > len(PRIMARY_PREFIX_GLOBE) {
-				primary = string(priStr[len(PRIMARY_PREFIX_GLOBE):])
-			}
 
-			secStr := strs[1]
-			if len(secStr) > len(SECONDARY_PREFIX_GLOBE) {
-				secondary = string(secStr[len(SECONDARY_PREFIX_GLOBE):])
-			}
-		} else {
-			priStr := strs[0]
-			if len(priStr) > len(PRIMARY_PREFIX_SCOPE) {
-				primary = string(priStr[len(PRIMARY_PREFIX_SCOPE):])
-			}
-
-			secStr := strs[1]
-			if len(secStr) > len(SECONDARY_PREFIX_SCOPE) {
-				secondary = string(secStr[len(SECONDARY_PREFIX_SCOPE):])
-			}
-		}
-
-		primaryDNS = strings.TrimSpace(primary)
-		secondaryDNS = strings.TrimSpace(secondary)
-	} else {
-		return "", "", fmt.Errorf("dns configuration has not found")
+	re := regexp.MustCompile(`(?m)Primary DNS:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\s*Seconday DNS:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)`)
+	matches := re.FindStringSubmatch(string(out))
+	if len(matches) != 3 {
+		return "", "", fmt.Errorf("failed to extract DNS addresses")
 	}
-	return primaryDNS, secondaryDNS, nil
+	fmt.Println(matches)
+	return matches[1], matches[2], nil
 }
 
 // Gets DNS information.
