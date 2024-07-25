@@ -258,9 +258,7 @@ func (cd *CommandDNS) UnSetDNS(iface string) error {
 			if !manager.HasCommand("nmcli") {
 				return fmt.Errorf("nmcli command not found, consider installing NetworkManager or use an alternative method for your Linux distribution")
 			}
-			fmt.Println(iface)
 			connName, err := getConnectionNameforLinux(iface)
-			fmt.Println("connName", connName)
 			if err != nil {
 				return err
 			}
@@ -473,7 +471,6 @@ func (cd *CommandDNS) GetDeviceName() (string, error) {
 				// Extract the device name
 				fields := strings.Fields(line)
 				if len(fields) >= 2 {
-					fmt.Println(fields[1])
 					return fields[1], nil
 				}
 			}
