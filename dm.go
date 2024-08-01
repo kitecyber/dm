@@ -370,7 +370,6 @@ func firewallToMap(output string) (map[string]string, error) {
 func parseFirewallRulesForLinux(output string) map[string]string {
 	var ruleMap map[string]string
 	lines := strings.Split(output, "\n")
-	fmt.Println(lines[2])
 	if len(lines) >= 3 {
 		ruleMap = make(map[string]string)
 		line := lines[2]

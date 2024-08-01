@@ -24,8 +24,8 @@ func init() {
 	Protocols = []string{"ANY", "ALL", "SSH", "FTP", "SFTP", "SCP", "UDP", "DNS", "DHCP", "IMAP", "SMTP", "POP", "SNPM", "SIP", "RTP", "RTCP", "TCP"}
 }
 
-func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, port string) error {
-	err := validateFirewallInput(rulename, direction, action, protocol, remoteip, port)
+func (f *Firewall) SetFirewall(ruleName, direction, action, protocol, remoteIP, port string) error {
+	err := validateFirewallInput(ruleName, direction, action, protocol, remoteIP, port)
 	if err != nil {
 		return err
 	}
@@ -34,13 +34,13 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 		if !manager.HasCommand("netsh") {
 			return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 		}
-		protocol = strings.ToLower(protocol)
-		if protocol == "" {
-			protocol = "any"
+		proto, err := getProtocolClass(strings.ToLower(protocol))
+		if err != nil {
+			return err
 		}
 
-		if ok, err := firewallRuleExistsWindows(rulename); ok {
-			return fmt.Errorf("firewall already exists with the given rule:%v", rulename)
+		if ok, err := firewallRuleExistsWindows(ruleName); ok {
+			return fmt.Errorf("firewall already exists with the given rule:%v", ruleName)
 		} else {
 			if err != nil {
 				return err
@@ -48,15 +48,15 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 		}
 		var cmdFirewall *exec.Cmd
 		// post can be set only if the protocol is tcp or udp
-		if (strings.ToLower(protocol) == "tcp" || strings.ToLower(protocol) == "udp") && port != "" {
-			cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+rulename, "dir="+direction, "action="+action, "protocol="+protocol, "remoteip="+remoteip, "localport="+port)
+		if (strings.ToLower(proto) == "tcp" || strings.ToLower(proto) == "udp") && port != "" {
+			cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+ruleName, "dir="+direction, "action="+action, "protocol="+protocol, "remoteIP="+remoteIP, "localport="+port)
 		} else {
-			cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+rulename, "dir="+direction, "action="+action, "protocol="+protocol, "remoteip="+remoteip)
+			cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+ruleName, "dir="+direction, "action="+action, "protocol="+protocol, "remoteIP="+remoteIP)
 		}
 
 		cmdFirewall.SysProcAttr = &syscall.SysProcAttr{}
 		cmdFirewall.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
-		err := cmdFirewall.Run()
+		err = cmdFirewall.Run()
 		if err != nil {
 			return fmt.Errorf("error while setting firewall rule.Error:%v", err.Error())
 		}
@@ -65,27 +65,37 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 			return fmt.Errorf("iptables command not found for operating system: %s", runtime.GOOS)
 		}
 
-		createChainCmd := exec.Command("iptables", "-N", rulename)
+		createChainCmd := exec.Command("iptables", "-N", ruleName)
 		createChainCmd.SysProcAttr = &syscall.SysProcAttr{}
 		createChainCmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
-		if err := createChainCmd.Run(); err != nil {
-			log.Println("Rule name already exists.Error creating rule name:", err)
+		if output, err := createChainCmd.CombinedOutput(); err != nil {
+			if strings.Contains(string(output), "Chain already exists") {
+				log.Println("Rule name already exists. Skipping...")
+				return nil
+			}
+			log.Println("Error fetching chain:", err)
 			return err
 		}
-		cmdmap := make(map[string]string)
+		cmdMap := make(map[string]string)
 		args := make([]string, 0)
 
-		cmdmap["-A"] = rulename
-		args = append(args, "-A", rulename)
+		cmdMap["-A"] = ruleName
+		args = append(args, "-A", ruleName)
 
-		if protocol == "all" || protocol == "any" {
-			protocol = "all"
-			args = append(args, "-p", "all")
-
-		} else {
-			args = append(args, "-p", protocol)
+		// Getting the protocol class for the given protocol
+		proto, err := getProtocolClass(strings.ToLower(protocol))
+		if err != nil {
+			return err
 		}
 
+		// Setting the protocol
+		if proto == "all" || proto == "any" {
+			args = append(args, "-p", "all") // default is all
+		} else {
+			args = append(args, "-p", proto) // else the given protocol class
+		}
+
+		// Setting the direction
 		if port == "all" || port == "any" {
 			port = ""
 		} else {
@@ -96,17 +106,18 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 			}
 		}
 
-		if remoteip == "all" || remoteip == "any" {
-			remoteip = ""
+		// Setting the remote ip
+		if remoteIP == "all" || remoteIP == "any" {
+			remoteIP = ""
 		} else {
 			if direction == "in" {
-				args = append(args, "-d", remoteip)
+				args = append(args, "-d", remoteIP)
 			} else if direction == "out" {
-				//args = append(args, "-s", remoteip)
+				//args = append(args, "-s", remoteIP)
 			}
 		}
 
-		if strings.ToLower((action)) == "allow" {
+		if strings.ToLower(action) == "allow" {
 			action = "ACCEPT"
 			args = append(args, "-j", "ACCEPT")
 		}
@@ -124,9 +135,10 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 		log.Println("Firewall Rule Command:", cmd.String())
-		_, err := cmd.CombinedOutput()
+		_, err = cmd.CombinedOutput()
 		if err != nil {
-			fmt.Println("Error setting up firewall rule:", err)
+			log.Println("command : ", cmd.String())
+			log.Println("Error setting up firewall rule:", err)
 			return err
 		}
 
@@ -135,8 +147,8 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 			action = "pass"
 		}
 
-		if ok, err := firewallAnchorExistsDarwin(rulename); ok {
-			return fmt.Errorf("firewall already exists with the given rule:%v", rulename)
+		if ok, err := firewallAnchorExistsDarwin(ruleName); ok {
+			return fmt.Errorf("firewall already exists with the given rule:%v", ruleName)
 		} else {
 			if err != nil {
 				return err
@@ -145,9 +157,9 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 
 		// There is no rule name concept in darwin based systems.
 		// anchors are used to group a rule or rules.
-		line := fmt.Sprintln("anchor", rulename, "{")
-		// line = line + fmt.Sprintln(action, " ", direction, " ", "proto", " ", protocol, " ", "from", " ", "any", " ", "to", " ", remoteip, " ", "port", " ", port)
-		line = line + fmt.Sprintln("\t", action, direction, "proto", protocol, "from", "any", "to", remoteip, "port", port)
+		line := fmt.Sprintln("anchor", ruleName, "{")
+		// line = line + fmt.Sprintln(action, " ", direction, " ", "proto", " ", protocol, " ", "from", " ", "any", " ", "to", " ", remoteIP, " ", "port", " ", port)
+		line = line + fmt.Sprintln("\t", action, direction, "proto", protocol, "from", "any", "to", remoteIP, "port", port)
 		line = line + "}"
 
 		// cmd := exec.Command("sh", "-c", "echo", fmt.Sprintf("'%s'>>/etc/pf.conf", line))
@@ -164,8 +176,8 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 	return nil
 }
 
-func (f *Firewall) UnSetFirewall(rulename string) error {
-	if rulename == "" {
+func (f *Firewall) UnSetFirewall(ruleName string) error {
+	if ruleName == "" {
 		return fmt.Errorf("invalid firewall rule name")
 	}
 	switch runtime.GOOS {
@@ -174,15 +186,15 @@ func (f *Firewall) UnSetFirewall(rulename string) error {
 			return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 		}
 
-		if ok, err := firewallRuleExistsWindows(rulename); !ok {
+		if ok, err := firewallRuleExistsWindows(ruleName); !ok {
 			if err != nil {
-				return fmt.Errorf("error in firewall rule:%v", rulename)
+				return fmt.Errorf("error in firewall rule:%v", ruleName)
 			}
-			return fmt.Errorf("no firewall exists with the given rule:%v", rulename)
+			return fmt.Errorf("no firewall exists with the given rule:%v", ruleName)
 		}
 		var cmdFirewall *exec.Cmd
 		// post can be set only if the protocol is tcp or udp
-		cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name="+rulename)
+		cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name="+ruleName)
 
 		err := cmdFirewall.Run()
 		if err != nil {
@@ -193,13 +205,13 @@ func (f *Firewall) UnSetFirewall(rulename string) error {
 		if !manager.HasCommand("iptables") {
 			return fmt.Errorf("iptables command not found for operating system: %s", runtime.GOOS)
 		}
-		cmd := exec.Command("iptables", "-F", rulename)
+		cmd := exec.Command("iptables", "-F", ruleName)
 		err := cmd.Run()
 		if err != nil {
 			return fmt.Errorf("error while deleting firewall rule.Error-1:%v", err.Error())
 		}
-		log.Println("deleting rules associated with the rule name:", rulename)
-		cmd = exec.Command("iptables", "-X", rulename)
+		log.Println("deleting rules associated with the rule name:", ruleName)
+		cmd = exec.Command("iptables", "-X", ruleName)
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 		err = cmd.Run()
@@ -207,19 +219,15 @@ func (f *Firewall) UnSetFirewall(rulename string) error {
 			return fmt.Errorf("error while deleting firewall rule.Error-2:%v", err.Error())
 		}
 
-		log.Println("Firewall rule delated that is associated with the name:", rulename)
+		log.Println("Firewall rule deleted that is associated with the name:", ruleName)
 
 	case "darwin":
-		if ok, err := firewallAnchorExistsDarwin(rulename); !ok || err != nil {
-			return fmt.Errorf("firewall rule does not exist or some err.rule:%v,%v", rulename, err)
-		} else {
-			if err != nil {
-				return err
-			}
+		if ok, err := firewallAnchorExistsDarwin(ruleName); !ok || err != nil {
+			return fmt.Errorf("firewall rule does not exist or some err.rule:%v,%v", ruleName, err)
 		}
 		// sudo pfctl -a my_anchor -F rules
-		// this deletes a rule based on the anchor. this application must ensure each rule has a saperate anchor
-		err := RemoveFirewallRuleByAnchorDarwin(rulename)
+		// this deletes a rule based on the anchor. this application must ensure each rule has a separate anchor
+		err := RemoveFirewallRuleByAnchorDarwin(ruleName)
 		if err != nil {
 			return fmt.Errorf("error while deleting firewall rule.Error:%v", err.Error())
 		}
@@ -231,24 +239,24 @@ func (f *Firewall) UnSetFirewall(rulename string) error {
 	return nil
 }
 
-func (f *Firewall) ShowFirewall(rulename string) (string, error) {
+func (f *Firewall) ShowFirewall(ruleName string) (string, error) {
 	switch runtime.GOOS {
 	case "windows":
 		if !manager.HasCommand("netsh") {
 			return "", fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 		}
-		if rulename == "" {
-			rulename = "all"
+		if ruleName == "" {
+			ruleName = "all"
 		}
 		var cmdFirewall *exec.Cmd
-		cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name="+rulename)
+		cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name="+ruleName)
 		output, err := cmdFirewall.Output()
 		if err != nil {
 			return "", fmt.Errorf("error while showing firewall rule.Error:%v", err.Error())
 		}
 		return string(output), nil
 	case "linux":
-		cmd := exec.Command("sudo", "iptables", "-L", rulename, "-n", "-v")
+		cmd := exec.Command("sudo", "iptables", "-L", ruleName, "-n", "-v")
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Println("Error:", err)
@@ -256,9 +264,9 @@ func (f *Firewall) ShowFirewall(rulename string) (string, error) {
 		}
 		return string(output), nil
 	case "darwin":
-		if rulename == "all" || rulename == "any" {
-			//cmd = exec.Command("pfctl", "-a", rulename, "-s", "rules")
-			rules, err := GetFirewAllRulesDarwin()
+		if ruleName == "all" || ruleName == "any" {
+			//cmd = exec.Command("pfctl", "-a", ruleName, "-s", "rules")
+			rules, err := GetFirewallRulesDarwin()
 			if err != nil {
 				return "", fmt.Errorf("error fetching firewall rules:%v", err.Error())
 			}
@@ -268,7 +276,7 @@ func (f *Firewall) ShowFirewall(rulename string) (string, error) {
 			}
 			return output, nil
 		} else {
-			rules, err := GetFirewallByAnchorDarwin(rulename)
+			rules, err := GetFirewallByAnchorDarwin(ruleName)
 			if err != nil {
 				return "", fmt.Errorf("error fetching firewall rules:%v", err.Error())
 			}
@@ -288,24 +296,24 @@ func (f *Firewall) ShowFirewall(rulename string) (string, error) {
 	return "", nil
 }
 
-func (f *Firewall) GetFirewall(rulename string) (firewall map[string]string, err error) {
+func (f *Firewall) GetFirewall(ruleName string) (firewall map[string]string, err error) {
 	switch runtime.GOOS {
 	case "windows":
 		if !manager.HasCommand("netsh") {
 			return nil, fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 		}
-		if strings.ToLower(rulename) == "all" || strings.ToLower(rulename) == "any" {
+		if strings.ToLower(ruleName) == "all" || strings.ToLower(ruleName) == "any" {
 			return nil, fmt.Errorf("invalid rule name")
 		}
 		var cmdFirewall *exec.Cmd
-		cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name="+rulename)
+		cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "show", "rule", "name="+ruleName)
 		output, err := cmdFirewall.Output()
 		if err != nil {
 			return nil, fmt.Errorf("error while showing firewall rule.Error:%v", err.Error())
 		}
 		return f.ToMap(string(output))
 	case "linux":
-		cmd := exec.Command("sudo", "iptables", "-L", rulename, "-n", "-v")
+		cmd := exec.Command("sudo", "iptables", "-L", ruleName, "-n", "-v")
 		output, err := cmd.Output()
 		if err != nil {
 			log.Println("Error:", err)
@@ -314,12 +322,12 @@ func (f *Firewall) GetFirewall(rulename string) (firewall map[string]string, err
 		return f.ToMap(string(output))
 
 	case "darwin":
-		rules, err := GetFirewallByAnchorDarwin(rulename)
+		rules, err := GetFirewallByAnchorDarwin(ruleName)
 		if err != nil {
 			return nil, fmt.Errorf("error fetching firewall rules:%v", err.Error())
 		}
 		if len(rules) > 0 {
-			return f.ToMap(rules[0]) //techinically there can be any number of rules per an anchor. But this tool must restrict while setFirewall
+			return f.ToMap(rules[0]) //technically there can be any number of rules per an anchor. But this tool must restrict while setFirewall
 		}
 
 	default:
@@ -328,7 +336,7 @@ func (f *Firewall) GetFirewall(rulename string) (firewall map[string]string, err
 	return nil, nil
 }
 
-// any commands to run after setup.Like restart the servers etc..
+// PostSetup any commands to run after setup.Like restart the servers etc.
 func (f *Firewall) PostSetup() error {
 	switch runtime.GOOS {
 	case "windows":
@@ -356,7 +364,7 @@ func (f *Firewall) PostSetup() error {
 }
 
 func (f *Firewall) ToMap(output string) (map[string]string, error) {
-	outputMap := make(map[string]string, 0)
+	outputMap := make(map[string]string)
 	switch runtime.GOOS {
 	case "windows":
 		lines := strings.Split(output, "\n")
@@ -390,24 +398,24 @@ func (f *Firewall) ToMap(output string) (map[string]string, error) {
 		return ruleMap, nil
 
 	case "darwin":
-		strs := strings.Split(output, " ")
-		for i, str := range strs {
+		stringSlice := strings.Split(output, " ")
+		for i, str := range stringSlice {
 			switch str {
 			case "pass", "block":
 				outputMap["action"] = str
 			case "in", "out":
 				outputMap["direction"] = str
 			case "proto":
-				if len(strs) >= i+1 {
-					outputMap["protocol"] = strs[i+1]
+				if len(stringSlice) >= i+1 {
+					outputMap["protocol"] = stringSlice[i+1]
 				}
 			case "port":
-				if len(strs) >= i+1 {
-					outputMap["port"] = strs[i+1]
+				if len(stringSlice) >= i+1 {
+					outputMap["port"] = stringSlice[i+1]
 				}
 			case "to":
-				if len(strs) >= i+1 {
-					outputMap["remoteIP"] = strs[i+1]
+				if len(stringSlice) >= i+1 {
+					outputMap["remoteIP"] = stringSlice[i+1]
 				}
 			}
 			if len(outputMap) > 0 {
@@ -423,12 +431,11 @@ func (f *Firewall) ToMap(output string) (map[string]string, error) {
 }
 
 func firewallToMap(output string) (map[string]string, error) {
-	outputMap := make(map[string]string, 0)
+	outputMap := make(map[string]string)
 	switch runtime.GOOS {
 	case "windows":
 		lines := strings.Split(output, "\n")
 		for _, line := range lines {
-			//fmt.Println("---->", line)
 			lineSep := strings.Split(line, ":")
 			if len(lineSep) == 2 {
 				switch lineSep[0] {
@@ -458,8 +465,8 @@ func firewallToMap(output string) (map[string]string, error) {
 		return ruleMap, nil
 
 	case "darwin":
-		strs := strings.Split(output, " ")
-		for i, str := range strs {
+		stringSlice := strings.Split(output, " ")
+		for i, str := range stringSlice {
 
 			switch str {
 			case "pass", "block":
@@ -467,16 +474,16 @@ func firewallToMap(output string) (map[string]string, error) {
 			case "in", "out":
 				outputMap["direction"] = str
 			case "proto":
-				if len(strs) >= i+1 {
-					outputMap["protocol"] = strs[i+1]
+				if len(stringSlice) >= i+1 {
+					outputMap["protocol"] = stringSlice[i+1]
 				}
 			case "port":
-				if len(strs) >= i+1 {
-					outputMap["port"] = strs[i+1]
+				if len(stringSlice) >= i+1 {
+					outputMap["port"] = stringSlice[i+1]
 				}
 			case "to":
-				if len(strs) >= i+1 {
-					outputMap["remoteIP"] = strs[i+1]
+				if len(stringSlice) >= i+1 {
+					outputMap["remoteIP"] = stringSlice[i+1]
 				}
 			}
 			if len(outputMap) > 0 {
@@ -491,8 +498,8 @@ func firewallToMap(output string) (map[string]string, error) {
 	return nil, nil
 }
 
-func validateFirewallInput(rulename, direction, action, protocol, remoteip, port string) error {
-	if rulename == "" {
+func validateFirewallInput(ruleName, direction, action, protocol, remoteIP, port string) error {
+	if ruleName == "" {
 		return fmt.Errorf("invalid rule name.Rule name must not be empty")
 	}
 	if !(strings.ToLower(direction) == "in" || strings.ToLower(direction) == "out") {
@@ -512,8 +519,8 @@ func validateFirewallInput(rulename, direction, action, protocol, remoteip, port
 	if !hasFound {
 		return fmt.Errorf("invalid protocol")
 	}
-	if !(remoteip == "" || strings.ToLower(remoteip) == "all" || strings.ToLower(remoteip) == "any") {
-		if !manager.IsValidIPAddressOrCIDR(remoteip) {
+	if !(remoteIP == "" || strings.ToLower(remoteIP) == "all" || strings.ToLower(remoteIP) == "any") {
+		if !manager.IsValidIPAddressOrCIDR(remoteIP) {
 			return fmt.Errorf("invalid ip address or cidr notation")
 		}
 	}
@@ -700,7 +707,7 @@ func GetFirewallByAnchorDarwin(anchorName string) ([]string, error) {
 	return rules, nil
 }
 
-func GetFirewAllRulesDarwin() ([]string, error) {
+func GetFirewallRulesDarwin() ([]string, error) {
 	var rules []string
 	file, err := os.Open("/etc/pf.conf")
 	if err != nil {
@@ -718,8 +725,6 @@ func GetFirewAllRulesDarwin() ([]string, error) {
 
 		ln := strings.ReplaceAll(line, " ", "")
 		if strings.Contains(ln, "anchor") && strings.Contains(ln, "{") {
-			//println(line)
-			//println(ln)
 			foundAnchor = true
 		} else {
 			if foundAnchor && ln != "}" {
