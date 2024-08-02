@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"syscall"
@@ -170,7 +171,7 @@ func (f *Firewall) SetFirewall(ruleName, direction, action, protocol, remoteIP, 
 
 		// cmd := exec.Command("sh", "-c", "echo", fmt.Sprintf("'%s'>>/etc/pf.conf", line))
 		// err := cmd.Run()
-		err := WriteFirewallRuleByAnchorDarwin(line)
+		err = WriteFirewallRuleByAnchorDarwin(line)
 		if err != nil {
 			return fmt.Errorf("error while setting firewall rule.Error:%v", err.Error())
 		}
@@ -276,17 +277,12 @@ func (f *Firewall) ShowFirewall(ruleName string) (string, error) {
 			}
 			return output, nil
 		} else {
-			rules, err := GetFirewallByAnchorDarwin(ruleName)
+			rules, err := getFirewallByAnchorName(ruleName)
 			if err != nil {
 				return "", fmt.Errorf("error fetching firewall rules:%v", err.Error())
 			}
-			// output := ""
-			// for _, rule := range rules {
-			// 	output += rule + "\n"
-			// }
-			// return output, nil
 			if len(rules) > 0 {
-				return rules[0], nil
+				return rules[0].Rule, nil
 			}
 		}
 	default:
@@ -320,12 +316,12 @@ func (f *Firewall) GetFirewall(ruleName string) (firewall map[string]string, err
 		}
 		return f.ToMap(string(output))
 	case "darwin":
-		rules, err := GetFirewallByAnchorDarwin(ruleName)
+		rules, err := getFirewallByAnchorName(ruleName)
 		if err != nil {
 			return nil, fmt.Errorf("error fetching firewall rules:%v", err.Error())
 		}
 		if len(rules) > 0 {
-			return f.ToMap(rules[0]) //technically there can be any number of rules per an anchor. But this tool must restrict while setFirewall
+			return f.ToMap(rules[0].Rule) //technically there can be any number of rules per an anchor. But this tool must restrict while setFirewall
 		}
 	default:
 		return nil, fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
@@ -507,16 +503,12 @@ func validateFirewallInput(ruleName, direction, action, protocol, remoteIP, port
 	if !hasFound {
 		return fmt.Errorf("invalid protocol")
 	}
-	if !(remoteIP == "" || strings.ToLower(remoteIP) == "all" || strings.ToLower(remoteIP) == "any") {
-		if !manager.IsValidIPAddressOrCIDR(remoteIP) {
-			return fmt.Errorf("invalid ip address or cidr notation")
-		}
+	if !(remoteIP != "" || strings.ToLower(remoteIP) == "all" || strings.ToLower(remoteIP) == "any") {
+		return fmt.Errorf("invalid ip address or cidr notation")
 	}
 
-	if port != "any" {
-		if !manager.IsValidPort(port) {
-			return fmt.Errorf("invalid port")
-		}
+	if !(port != "" || strings.ToLower(port) == "all" || strings.ToLower(port) == "any") {
+		return fmt.Errorf("invalid port")
 	}
 	return nil
 }
@@ -551,7 +543,7 @@ func firewallRuleExistsWindows(ruleName string) (bool, error) {
 }
 
 func firewallAnchorExistsDarwin(anchorName string) (bool, error) {
-	if rules, err := GetFirewallByAnchorDarwin(anchorName); err != nil {
+	if rules, err := getFirewallByAnchorName(anchorName); err != nil {
 		return false, err
 	} else if len(rules) > 0 {
 		return true, nil
@@ -589,7 +581,6 @@ func firewallAnchorExistsLinux(chainName string) bool {
 func parseFirewallRulesForLinux(output string) map[string]string {
 	var ruleMap map[string]string
 	lines := strings.Split(output, "\n")
-	//fmt.Println(lines[2])
 	if len(lines) >= 3 {
 		ruleMap = make(map[string]string)
 		line := lines[2]
@@ -659,47 +650,43 @@ func (f *Firewall) IsFirewallExists(ruleName string) bool {
 	}
 }
 
-// GetFirewallByAnchorDarwin retrieves firewall rules by anchor name from /etc/pf.conf
-func GetFirewallByAnchorDarwin(anchorName string) ([]string, error) {
-	var rules []string
+// FirewallRule represents a firewall rule with its anchor name and rule details.
+type FirewallRule struct {
+	AnchorName string
+	Rule       string
+}
+
+// getFirewallByAnchorName reads the /etc/pf.conf file and returns the firewall rules for a given anchor name.
+func getFirewallByAnchorName(anchorName string) ([]FirewallRule, error) {
 	file, err := os.Open(Darwin_firewall_rules)
 	if err != nil {
-		log.Println("Error opening file:", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to open pf.conf: %w", err)
 	}
 	defer file.Close()
 
+	var rules []FirewallRule
 	scanner := bufio.NewScanner(file)
 
-	// Flag to indicate if the desired anchor is found
-	foundAnchor := false
-	anchorStart := "anchor \"" + anchorName + "\" {"
-	anchorEnd := "}"
+	anchorRegex := regexp.MustCompile(`anchor\s+(\w+)\s+\{`)
+	ruleRegex := regexp.MustCompile(`pass\s+in\s+proto\s+(\w+)\s+from\s+(\w+)\s+to\s+(\d+\.\d+\.\d+\.\d+)\s+port\s+(\d+)`)
 
+	var currentAnchor string
 	for scanner.Scan() {
-		line := scanner.Text()
-		ln := strings.TrimSpace(line)
-
-		if ln == anchorStart {
-			foundAnchor = true
-			continue
-		}
-
-		if foundAnchor {
-			if ln == anchorEnd {
-				break
+		line := strings.TrimSpace(scanner.Text())
+		if matches := anchorRegex.FindStringSubmatch(line); len(matches) > 1 {
+			currentAnchor = matches[1]
+		} else if matches := ruleRegex.FindStringSubmatch(line); len(matches) > 0 {
+			if currentAnchor == anchorName {
+				rules = append(rules, FirewallRule{
+					AnchorName: currentAnchor,
+					Rule:       line,
+				})
 			}
-			rules = append(rules, strings.TrimSpace(line))
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Println("Error reading file:", err)
-		return nil, err
-	}
-
-	if !foundAnchor {
-		return nil, fmt.Errorf("anchor %s not found", anchorName)
+		return nil, fmt.Errorf("failed to scan pf.conf: %w", err)
 	}
 
 	return rules, nil
@@ -791,7 +778,7 @@ func RemoveFirewallRuleByAnchorDarwin(anchorName string) error {
 	}
 
 	// Write the modified content back to the file (caution advised)
-	err = os.WriteFile(Darwin_firewall_rules, []byte(newContent), 0644)
+	err = os.WriteFile(Darwin_firewall_rules, []byte(newContent.String()), 0644)
 	if err != nil {
 		log.Println("Error writing file:", err)
 		return err
