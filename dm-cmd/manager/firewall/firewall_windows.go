@@ -2,6 +2,7 @@ package firewall
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -30,27 +31,31 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 		if !manager.HasCommand("netsh") {
 			return fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 		}
-		protocol = strings.ToLower(protocol)
-		if protocol == "" {
-			protocol = "any"
+
+		// Getting the protocol class for the given protocol
+		proto, err := getProtocolClass(strings.ToLower(protocol))
+		if err != nil {
+			return err
 		}
 
 		if ok, err := firewallRuleExistsWindows(rulename); ok {
-			return fmt.Errorf("firewall already exists with the given rule:%v", rulename)
+			log.Printf("firewall already exists with the given rule:%v", rulename)
+			return nil
 		} else {
 			if err != nil {
 				return err
 			}
 		}
 		var cmdFirewall *exec.Cmd
+
 		// post can be set only if the protocol is tcp or udp
-		if (strings.ToLower(protocol) == "tcp" || strings.ToLower(protocol) == "udp") && port != "" {
-			cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+rulename, "dir="+direction, "action="+action, "protocol="+protocol, "remoteip="+remoteip, "localport="+port)
+		if (strings.ToLower(proto) == "tcp" || strings.ToLower(proto) == "udp") && port != "" {
+			cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+rulename, "dir="+direction, "action="+action, "protocol="+proto, "remoteip="+remoteip, "localport="+port)
 		} else {
-			cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+rulename, "dir="+direction, "action="+action, "protocol="+protocol, "remoteip="+remoteip)
+			cmdFirewall = exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+rulename, "dir="+direction, "action="+action, "protocol="+proto, "remoteip="+remoteip)
 		}
 
-		err := cmdFirewall.Run()
+		err = cmdFirewall.Run()
 		if err != nil {
 			return fmt.Errorf("error while setting firewall rule.Error:%v", err.Error())
 		}
@@ -117,7 +122,7 @@ func (f *Firewall) SetFirewall(rulename, direction, action, protocol, remoteip, 
 		log.Println("Firewall Rule Command:", cmd.String())
 		_, err := cmd.CombinedOutput()
 		if err != nil {
-			fmt.Println("Error setting up firewall rule:", err)
+			log.Println("Error setting up firewall rule:", err)
 			return err
 		}
 
@@ -415,7 +420,6 @@ func firewallToMap(output string) (map[string]string, error) {
 	case "windows":
 		lines := strings.Split(output, "\n")
 		for _, line := range lines {
-			//fmt.Println("---->", line)
 			lineSep := strings.Split(line, ":")
 			if len(lineSep) == 2 {
 				switch lineSep[0] {
@@ -514,29 +518,30 @@ func validateFirewallInput(rulename, direction, action, protocol, remoteip, port
 }
 
 func firewallRuleExistsWindows(ruleName string) (bool, error) {
-	// Run PowerShell command to check if the firewall rule exists
-	if !manager.HasCommand("netsh") {
-		return false, fmt.Errorf("netsh not available")
-	}
-	cmd := exec.Command("netsh", "advfirewall", "firewall", "show", "rule", ruleName)
-	//netsh advfirewall firewall show rule demo-example-5
-	// Run the command and capture output
-	output, err := cmd.Output()
-	fmt.Println(string(output), err)
+	// Construct the netsh command to check if the firewall rule exists
+	cmd := exec.Command("cmd", "/C", "netsh", "advfirewall", "firewall", "show", "rule", fmt.Sprintf("name=%s", ruleName))
 
-	// Convert output bytes to string
-	outputStr := string(output)
-	if string(output) != "" {
-		// Check if the rule exists based on the output
-		if strings.Contains(outputStr, "No rules match the specified criteria") {
-			// Rule does not exist
-			return false, nil
-		}
-	}
+	// Capture both stdout and stderr
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
+	// Run the command
+	err := cmd.Run()
+
+	// Handle empty stdout and stderr with exit status 1
 	if err != nil {
-		// If there's an error, return false and the error
-		return false, fmt.Errorf("error checking firewall rule: %v", err)
+		if exitError, ok := err.(*exec.ExitError); ok {
+			stdoutArr := strings.Split(stdout.String(), "\n")
+			if exitError.ExitCode() == 1 && stdout.Len() > 0 && stderr.Len() == 0 {
+				// Possible no rule found
+				if strings.Contains(strings.TrimSpace(stdoutArr[1]), "No rules match the specified criteria") {
+					return false, nil
+				}
+			}
+		}
+		// Return false and the error
+		return false, fmt.Errorf("error checking firewall rule: %v, stderr: %v", err, stderr.String())
 	}
 
 	// Rule exists
@@ -582,7 +587,6 @@ func firewallAnchorExistsLinux(chainName string) bool {
 func parseFirewallRulesForLinux(output string) map[string]string {
 	var ruleMap map[string]string
 	lines := strings.Split(output, "\n")
-	//fmt.Println(lines[2])
 	if len(lines) >= 3 {
 		ruleMap = make(map[string]string)
 		line := lines[2]
