@@ -4,6 +4,7 @@
 package dns
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"log"
@@ -118,13 +119,13 @@ func (cd *CommandDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 			cmdPrimary.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 			err1 := cmdPrimary.Run()
 			if err1 != nil {
-				return fmt.Errorf("Error setting Primary DNS for the interface:%v.Error:%v", iface, err1.Error())
+				return fmt.Errorf("error setting Primary DNS for the interface:%v.Error:%v", iface, err1.Error())
 			}
 			cmdSecondary.SysProcAttr = &syscall.SysProcAttr{}
 			cmdSecondary.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 			err2 := cmdSecondary.Run()
 			if err2 != nil {
-				return fmt.Errorf("Error setting Secondary DNS for the interface:%v.Error:%v", iface, err2.Error())
+				return fmt.Errorf("error setting Secondary DNS for the interface:%v.Error:%v", iface, err2.Error())
 			}
 		case "linux":
 			if !manager.HasCommand("nmcli") {
@@ -199,7 +200,7 @@ func (cd *CommandDNS) UnSetDNS(iface string) error {
 				if err != nil {
 					return err
 				}
-				cmd = exec.Command("nmcli", "connection", "modify", connName, "ipv4.dns")
+				cmd = exec.Command("nmcli", "connection", "modify", connName, "ipv4.dns", "")
 				cmd.SysProcAttr = &syscall.SysProcAttr{}
 				cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 				err = cmd.Run()
@@ -261,7 +262,7 @@ func (cd *CommandDNS) UnSetDNS(iface string) error {
 			if err != nil {
 				return err
 			}
-			cmd = exec.Command("nmcli", "connection", "modify", connName, "ipv4.dns")
+			cmd = exec.Command("nmcli", "connection", "modify", connName, "ipv4.dns", "")
 			cmd.SysProcAttr = &syscall.SysProcAttr{}
 			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(0), Gid: uint32(0)}
 			err = cmd.Run()
@@ -445,4 +446,43 @@ func getConnectionNameforLinux(interfaceName string) (string, error) {
 
 	// Connection name not found
 	return "", fmt.Errorf("connection name not found for interface %s", interfaceName)
+}
+
+func (cd *CommandDNS) GetDeviceName() (string, error) {
+	switch runtime.GOOS {
+	case "darwin":
+		return "macOS", nil
+	case "linux":
+		// Execute the command
+		cmd := exec.Command("nmcli", "dev", "show")
+		var out bytes.Buffer
+		cmd.Stdout = &out
+
+		err := cmd.Run()
+		if err != nil {
+			return "", fmt.Errorf("failed to execute nmcli command: %v", err)
+		}
+
+		// Read the output line by line
+		scanner := bufio.NewScanner(&out)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "GENERAL.DEVICE:") {
+				// Extract the device name
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					return fields[1], nil
+				}
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			return "", fmt.Errorf("error reading command output: %v", err)
+		}
+		return "", fmt.Errorf("GENERAL.DEVICE not found in nmcli output")
+	case "windows":
+		return "Windows", nil
+	default:
+		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
 }
