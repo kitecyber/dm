@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -315,47 +316,37 @@ func (cd *CommandDNS) getDNSLinux() (string, string, error) {
 }
 
 func (cd *CommandDNS) getDNSWindows() (string, string, error) {
+
 	if !manager.HasCommand("netsh") {
 		return "", "", fmt.Errorf("netsh command not found for operating system: %s", runtime.GOOS)
 	}
-	cmd := exec.Command("netsh", "interface", "ip", "show", "dns")
-	output, err := cmd.Output()
+
+	var dnsServers []string
+
+	// Execute the netsh command
+	cmd := exec.Command("netsh", "interface", "ip", "show", "dnsservers")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
 	if err != nil {
 		return "", "", err
 	}
 
-	// Convert output bytes to string
-	outputStr := string(output)
+	// Regular expression to match the DNS servers
+	re := regexp.MustCompile(`(?i)DNS servers configured through DHCP:\s+([\d\.]+(?:\s+[\d\.]+)*)|Statically Configured DNS Servers:\s+([\d\.]+(?:\s+[\d\.]+)*)`)
+	matches := re.FindAllStringSubmatch(out.String(), -1)
 
-	// Find lines containing DNS server information
-	lines := strings.Split(outputStr, "\n")
-	var primaryDNS, secondaryDNS string
-	for _, line := range lines {
-		if strings.Contains(line, "Configuration for interface") {
-			// Extract primary and secondary DNS from the next lines
-			for i := 0; i < 2; i++ {
-				line = lines[i]
-				if strings.Contains(line, "DNS servers configured through DHCP") {
-					// DHCP is used, no manual DNS configuration
-					primaryDNS = "Obtained from DHCP"
-					secondaryDNS = "Obtained from DHCP"
-					break
-				} else if strings.Contains(line, "Statically Configured DNS Servers") {
-					// Static DNS configuration found
-					dnsServers := strings.Fields(line)
-					if len(dnsServers) >= 6 {
-						primaryDNS = dnsServers[4]
-					}
-					if len(dnsServers) >= 8 {
-						secondaryDNS = dnsServers[6]
-					}
-					break
-				}
+	for _, match := range matches {
+		for _, group := range match[1:] {
+			if group != "" {
+				// Split the group by whitespace and append each IP address to the dnsServers slice
+				servers := strings.Fields(group)
+				dnsServers = append(dnsServers, servers...)
 			}
-			break
 		}
 	}
-	return primaryDNS, secondaryDNS, nil
+
+	return dnsServers[0], dnsServers[1], nil
 }
 
 func (cd *CommandDNS) getDNSDarwin() (string, string, error) {

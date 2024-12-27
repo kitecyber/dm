@@ -5,6 +5,7 @@ package dns
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -19,7 +20,7 @@ import (
 
 type GlobalDNS struct{}
 
-// there is no significance for iface here as it is system level DNS. This is kept to satisfy the interface
+// SetDNS there is no significance for iface here as it is system level DNS. This is kept to satisfy the interface
 func (gd *GlobalDNS) SetDNS(iface, primaryDNS, secondaryDNS string) error {
 	var cmd *exec.Cmd
 	if !manager.IsValidIP(primaryDNS) {
@@ -99,7 +100,7 @@ func (gd *GlobalDNS) UnSetDNS(iface string) error {
 	return nil
 }
 
-// there is no significance for iface here as it is system level DNS. This is kept to satisfy the interface
+// GetDNS there is no significance for iface here as it is system level DNS. This is kept to satisfy the interface
 func (gd *GlobalDNS) GetDNS(iface string) (string, string, error) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
@@ -227,4 +228,45 @@ func (gd *GlobalDNS) unsetDNSForLinuxAndDarwin() error {
 		return err
 	}
 	return nil
+}
+
+// GetDeviceName This is the same function as in CommandDNS, It is repeated here to satisfy the interface
+func (gd *GlobalDNS) GetDeviceName() (string, error) {
+	switch runtime.GOOS {
+	case "darwin":
+		return "macOS", nil
+	case "linux":
+		// Execute the command
+		cmd := exec.Command("nmcli", "dev", "show")
+		var out bytes.Buffer
+		cmd.Stdout = &out
+
+		err := cmd.Run()
+		if err != nil {
+			return "", fmt.Errorf("failed to execute nmcli command: %v", err)
+		}
+
+		// Read the output line by line
+		scanner := bufio.NewScanner(&out)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "GENERAL.DEVICE:") {
+				// Extract the device name
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					fmt.Println(fields[1])
+					return fields[1], nil
+				}
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			return "", fmt.Errorf("error reading command output: %v", err)
+		}
+		return "", fmt.Errorf("GENERAL.DEVICE not found in nmcli output")
+	case "windows":
+		return "Windows", nil
+	default:
+		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
 }
